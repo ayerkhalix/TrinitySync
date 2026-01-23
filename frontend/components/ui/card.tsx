@@ -6,16 +6,20 @@ interface CardProps {
   children: ReactNode;
   className?: string;
   hover?: boolean;
+  onClick?: () => void;
 }
 
-export const Card = ({ children, className = '', hover = true }: CardProps) => {
+export const Card = ({ children, className = '', hover = true, onClick }: CardProps) => {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
       whileHover={hover ? { y: -4, transition: { duration: 0.2 } } : {}}
-      className={`glass-card rounded-xl p-6 ${className}`}
+      className={`glass-card rounded-xl p-6 ${className} ${onClick ? 'cursor-pointer' : ''}`}
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
     >
       {children}
     </motion.div>
