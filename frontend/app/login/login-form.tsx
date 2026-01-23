@@ -3,10 +3,10 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useAuth } from '@/hooks/use-auth';
+import { useRouter } from 'next/navigation';
 
 interface LoginFormProps {
   role: 'student' | 'admin';
@@ -20,25 +20,39 @@ export function LoginForm({ role }: LoginFormProps) {
     password: role === 'student' ? 'password' : 'admin123',
   });
   const [error, setError] = useState('');
-  
-  const { login } = useAuth();
+  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
-    const result = await login(formData);
-    
-    if (result.success) {
-      // Redirect based on role
-      const redirectPath = result.user?.role === 'student' ? '/dashboard' : '/admin';
-      window.location.href = redirectPath;
-    } else {
-      setError(result.error || 'Login failed');
-    }
-    
-    setLoading(false);
+    // Simulate API call
+    setTimeout(() => {
+      if (formData.email && formData.password) {
+        // Store mock user in localStorage
+        const mockUser = {
+          id: 1,
+          email: formData.email,
+          first_name: 'John',
+          last_name: 'Doe',
+          role: role,
+          student_id: '2023-00123',
+          department: 'CET',
+          year_level: 'first_year',
+          program: 'BSIT',
+        };
+        
+        localStorage.setItem('user', JSON.stringify(mockUser));
+        
+        // Redirect based on role
+        const redirectPath = role === 'student' ? '/dashboard' : '/admin';
+        router.push(redirectPath);
+      } else {
+        setError('Please fill in all fields');
+      }
+      setLoading(false);
+    }, 1000);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -120,9 +134,12 @@ export function LoginForm({ role }: LoginFormProps) {
       <Button
         type="submit"
         loading={loading}
-        className="w-full !py-3 text-lg"
+        className="w-full !py-3 text-lg group"
       >
-        Sign In
+        <span className="flex items-center justify-center space-x-2">
+          <span>Sign In</span>
+          <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
+        </span>
       </Button>
 
       <div className="relative my-6">
@@ -140,7 +157,6 @@ export function LoginForm({ role }: LoginFormProps) {
           className="flex items-center justify-center space-x-2 p-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
         >
           <svg className="h-5 w-5" viewBox="0 0 24 24">
-            {/* Google Icon */}
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
             <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
             <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
@@ -153,7 +169,6 @@ export function LoginForm({ role }: LoginFormProps) {
           className="flex items-center justify-center space-x-2 p-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
         >
           <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-            {/* Microsoft Icon */}
             <path d="M0 0h11.377v11.372H0zm0 12.628h11.377V24H0zm12.623 0H24V24H12.623zm0-12.628H24v11.372H12.623z" />
           </svg>
           <span className="text-sm font-medium">Microsoft</span>

@@ -3,9 +3,23 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Calendar, GraduationCap, Shield, UserRound } from 'lucide-react';
+import { Calendar, GraduationCap, Shield } from 'lucide-react';
 import { LoginForm } from './login-form';
 import { Button } from '@/components/ui/button';
+
+// Generate particles data
+const generateParticles = (count: number) => {
+  return Array.from({ length: count }, (_, i) => ({
+    id: i,
+    x: Math.random() * 100 + 'vw',
+    y: Math.random() * 100 + 'vh',
+    dx: Math.random() * 100 + 'vw',
+    dy: Math.random() * 100 + 'vh',
+    duration: Math.random() * 10 + 10,
+  }));
+};
+
+const particles = generateParticles(20);
 
 export default function LoginPage() {
   const [selectedRole, setSelectedRole] = useState<'student' | 'admin'>('student');
@@ -30,23 +44,18 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
       {/* Animated Background Elements */}
-      <div className="absolute inset-0 overflow-hidden">
-        {[...Array(20)].map((_, i) => (
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {particles.map((p, i) => (
           <motion.div
-            key={i}
-            className="absolute h-1 w-1 rounded-full bg-blue-200"
-            initial={{
-              x: Math.random() * 100 + 'vw',
-              y: Math.random() * 100 + 'vh',
-            }}
-            animate={{
-              x: Math.random() * 100 + 'vw',
-              y: Math.random() * 100 + 'vh',
-            }}
+            key={p.id}
+            className="absolute h-1 w-1 rounded-full bg-blue-200/50"
+            initial={{ x: p.x, y: p.y }}
+            animate={{ x: p.dx, y: p.dy }}
             transition={{
-              duration: Math.random() * 10 + 10,
+              duration: p.duration,
               repeat: Infinity,
               repeatType: 'reverse',
+              ease: 'easeInOut',
             }}
           />
         ))}
@@ -141,7 +150,7 @@ export default function LoginPage() {
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="glass-card p-6 rounded-xl"
+                className="bg-white/80 backdrop-blur-lg border border-gray-200/50 rounded-xl p-6 shadow-lg"
               >
                 <h4 className="font-semibold text-gray-900 mb-2">Need Help?</h4>
                 <p className="text-sm text-gray-600">
@@ -159,7 +168,7 @@ export default function LoginPage() {
               initial={{ x: 20, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
               transition={{ delay: 0.4 }}
-              className="glass-card p-8 rounded-2xl shadow-2xl"
+              className="bg-white/80 backdrop-blur-lg border border-gray-200/50 rounded-2xl p-8 shadow-2xl"
             >
               <AnimatePresence mode="wait">
                 <motion.div
