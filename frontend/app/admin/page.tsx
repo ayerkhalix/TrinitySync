@@ -108,7 +108,7 @@ export default function AdminDashboard() {
     { 
       label: 'Create Schedule', 
       icon: Plus, 
-      onClick: () => navigateTo('/admin/schedules/create-schedule'),
+      onClick: () => navigateTo('/admin/create-schedule'),
       color: 'blue' 
     },
     { 
@@ -144,7 +144,7 @@ export default function AdminDashboard() {
   ];
 
   const handleNewSchedule = () => {
-    navigateTo('/admin/schedules/create-schedule');
+    navigateTo('/admin/create-schedule');
   };
 
   const handleSettings = () => {
@@ -206,7 +206,7 @@ export default function AdminDashboard() {
       <Navbar />
       
       {/* Main content with padding-top to account for fixed navbar */}
-      <div className="pt-12"> {/* Increased padding to 5rem (80px) */}
+      <div className="pt-4"> {/* Increased padding to 5rem (80px) */}
         <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
           {/* Welcome Section */}
           <motion.div
