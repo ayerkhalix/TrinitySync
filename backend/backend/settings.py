@@ -43,6 +43,11 @@ INSTALLED_APPS = [
     
     # Local apps
     'scheduler',
+    
+    'accounts',
+    'core',
+    'schedules',
+    'activity_logs',
 ]
 
 MIDDLEWARE = [
