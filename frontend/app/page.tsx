@@ -176,7 +176,7 @@ export default function HomePage() {
         </motion.header>
 
         {/* Hero Section */}
-        <main className="px-4 sm:px-6 lg:px-8 pt-12 pb-20">
+        <main className="px-4 sm:px-6 lg:px-8 pt-16 pb-20">
           <div className="max-w-7xl mx-auto">
             {/* Welcome Section */}
             <motion.div
