@@ -39,8 +39,8 @@ export const Navbar = () => {
   };
 
   const menuItems = [
-    { href: '/dashboard', label: 'Dashboard', icon: <Calendar size={18} /> },
-    { href: '/admin', label: 'Schedules', icon: <CalendarDays size={18} /> },
+    { href: '/admin', label: 'Dashboard', icon: <Calendar size={18} /> },
+    { href: '/admin/view-schedules', label: 'Schedules', icon: <CalendarDays size={18} /> },
     { href: '/admin/activity-logs', label: 'Activity Logs', icon: <Activity size={18} /> },
     { href: '/admin/settings', label: 'System Settings', icon: <Settings size={18} /> },
   ];
@@ -104,7 +104,7 @@ export const Navbar = () => {
                 >
                   <div className="flex items-center gap-2">
                     <h1 className="text-xl font-bold text-foreground tracking-tight">
-                      ScheduleFlow
+                      TrinitySync
                     </h1>
                     <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-primary/10 text-primary rounded border border-primary/30">
                       ADMIN
@@ -160,32 +160,6 @@ export const Navbar = () => {
 
             {/* Right Side Actions */}
             <div className="flex items-center space-x-2">
-              {/* Search */}
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="hidden md:flex items-center justify-center h-10 w-10 rounded-xl bg-accent text-muted-foreground hover:text-foreground hover:bg-accent/80 border border-border transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20"
-              >
-                <Search className="h-5 w-5" />
-              </motion.button>
-
-              {/* Notification */}
-              <motion.div className="relative">
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="flex items-center justify-center h-10 w-10 rounded-xl bg-accent text-muted-foreground hover:text-foreground hover:bg-accent/80 border border-border transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20"
-                >
-                  <Bell className="h-5 w-5" />
-                  {showNotification && (
-                    <motion.span
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-destructive border-2 border-card"
-                    />
-                  )}
-                </motion.button>
-              </motion.div>
 
               {/* Theme Toggle */}
               <motion.button
@@ -221,6 +195,25 @@ export const Navbar = () => {
                   </motion.div>
                 </AnimatePresence>
               </motion.button>
+
+
+                      {/* Notification */}
+              <motion.div className="relative">
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  className="flex items-center justify-center h-10 w-10 rounded-xl bg-accent text-muted-foreground hover:text-foreground hover:bg-accent/80 border border-border transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  <Bell className="h-5 w-5" />
+                  {showNotification && (
+                    <motion.span
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-destructive border-2 border-card"
+                    />
+                  )}
+                </motion.button>
+              </motion.div>
 
               {/* User Menu */}
               {user ? (

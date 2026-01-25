@@ -1,4 +1,4 @@
-// app/admin/page.tsx - REDESIGNED
+// app/admin/page.tsx - REDESIGNED (Updated for your Card component)
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -7,9 +7,12 @@ import {
   Calendar, Users, Building, AlertTriangle, 
   Upload, BarChart3, Settings, Clock,
   Filter, Download, Plus, Eye, History, FileText,
-  ChevronRight, CheckCircle, XCircle, AlertCircle
+  ChevronRight, CheckCircle, XCircle, AlertCircle,
+  ArrowUpRight, ArrowDownRight, MoreVertical
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { ConflictAlert } from './components/conflict-alert';
 import { BulkUpload } from './components/bulk-upload';
@@ -62,11 +65,13 @@ export default function AdminDashboard() {
   const adminCards = [
     {
       title: 'Total Schedules',
-      value: stats.totalSchedules,
+      value: '156',
       icon: Calendar,
       color: 'primary',
       change: '+12%',
+      changePositive: true,
       description: 'Active this semester',
+      meta: 'Updated just now',
       onClick: () => {
         setActiveTab('schedules');
         setTimeout(() => {
@@ -76,29 +81,35 @@ export default function AdminDashboard() {
     },
     {
       title: 'Pending Conflicts',
-      value: stats.pendingConflicts,
+      value: '12',
       icon: AlertTriangle,
       color: 'destructive',
       change: '-3%',
+      changePositive: false,
       description: 'Requires resolution',
+      meta: 'Updated 5 min ago',
       onClick: () => navigateTo('/admin/conflicts')
     },
     {
       title: 'Active Rooms',
-      value: stats.activeRooms,
+      value: '24',
       icon: Building,
       color: 'secondary',
       change: '+5%',
+      changePositive: true,
       description: 'Currently allocated',
+      meta: 'Updated 15 min ago',
       onClick: () => navigateTo('/admin/rooms')
     },
     {
       title: 'Instructors',
-      value: stats.totalInstructors,
+      value: '45',
       icon: Users,
       color: 'accent',
       change: '+8%',
+      changePositive: true,
       description: 'Teaching this semester',
+      meta: 'Updated 30 min ago',
       onClick: () => navigateTo('/admin/instructors')
     },
   ];
@@ -210,369 +221,469 @@ export default function AdminDashboard() {
   ];
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-      {/* Welcome Section */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="mb-8"
-      >
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-              <span className="text-sm font-medium text-muted-foreground">ADMIN DASHBOARD</span>
+    <div className="min-h-screen bg-background">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Welcome Header */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-10"
+        >
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+                <span className="text-sm font-medium text-muted-foreground tracking-wide">ADMIN DASHBOARD</span>
+              </div>
+              <h1 className="text-3xl lg:text-4xl font-bold tracking-tight text-foreground">
+                Welcome back, <span className="text-primary">{user?.first_name}</span>
+              </h1>
+              <p className="text-muted-foreground text-base lg:text-lg max-w-2xl">
+                Manage schedules, resolve conflicts, and oversee campus operations.
+              </p>
             </div>
-            <h1 className="text-3xl font-bold text-foreground">Welcome back, {user?.first_name}</h1>
-            <p className="text-muted-foreground mt-2">
-              Manage schedules, resolve conflicts, and oversee operations.
-            </p>
+            <div className="flex items-center gap-3">
+              <Button 
+                size="lg"
+                className="h-11 px-6 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
+                onClick={handleNewSchedule}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                New Schedule
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <Button 
-              variant="outline" 
-              className="border-border text-foreground hover:bg-accent/50 hover:border-border/80"
-              onClick={handleSettings}
-            >
-              <Settings className="h-4 w-4 mr-2" />
-              Settings
-            </Button>
-            <Button 
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
-              onClick={handleNewSchedule}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              New Schedule
-            </Button>
+
+          <Separator className="bg-border/50" />
+        </motion.div>
+
+        {/* Stats Overview Grid */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="mb-12"
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {adminCards.map((stat, index) => {
+              const Icon = stat.icon;
+              const colorClass = stat.color === 'destructive' ? 'text-destructive' : 
+                               stat.color === 'secondary' ? 'text-secondary' : 
+                               stat.color === 'accent' ? 'text-accent' : 'text-primary';
+              
+              return (
+                <motion.div
+                  key={stat.title}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 + index * 0.05 }}
+                >
+                  <Card 
+                    hover={true}
+                    className="h-full border-border/40 bg-card/50 backdrop-blur-sm"
+                    onClick={stat.onClick}
+                  >
+                    <div className="p-6">
+                      {/* Header Zone */}
+                      <div className="flex items-start justify-between mb-6">
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-muted-foreground tracking-wide">
+                            {stat.title}
+                          </p>
+                          {/* Dominant Number */}
+                          <p className="text-3xl font-bold text-foreground tracking-tight">
+                            {stat.value}
+                          </p>
+                        </div>
+                        <div className={`p-3 rounded-xl ${
+                          stat.color === 'primary' ? 'bg-primary/10' :
+                          stat.color === 'destructive' ? 'bg-destructive/10' :
+                          stat.color === 'secondary' ? 'bg-secondary/10' :
+                          'bg-accent/10'
+                        }`}>
+                          <Icon className={`h-5 w-5 ${colorClass}`} />
+                        </div>
+                      </div>
+
+                      {/* Main Content Zone */}
+                      <div className="space-y-3">
+                        {/* Change Badge */}
+                        <div className="flex items-center gap-2">
+                          <Badge 
+                            variant={stat.changePositive ? "success" : "outline"}
+                            className={`px-2 py-1 text-xs font-medium ${
+                              stat.changePositive 
+                                ? '' 
+                                : 'bg-amber-500/10 text-amber-700 border-amber-500/20'
+                            }`}
+                          >
+                            {stat.changePositive ? (
+                              <ArrowUpRight className="h-3 w-3 mr-1" />
+                            ) : (
+                              <ArrowDownRight className="h-3 w-3 mr-1" />
+                            )}
+                            {stat.change}
+                          </Badge>
+                        </div>
+
+                        {/* Description */}
+                        <p className="text-sm text-muted-foreground">
+                          {stat.description}
+                        </p>
+                      </div>
+
+                      {/* Footer/Meta Zone */}
+                      <div className="mt-6 pt-4 border-t border-border/30">
+                        <div className="flex items-center text-xs text-muted-foreground">
+                          <Clock className="h-3 w-3 mr-2" />
+                          <span>{stat.meta}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                </motion.div>
+              );
+            })}
           </div>
-        </div>
-      </motion.div>
+        </motion.div>
 
-      {/* Stats Overview */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
-      >
-        {adminCards.map((stat, index) => {
-          const colorMap = {
-            primary: 'bg-primary/10 text-primary border-primary/20',
-            destructive: 'bg-destructive/10 text-destructive border-destructive/20',
-            secondary: 'bg-secondary/10 text-secondary-foreground border-secondary/20',
-            accent: 'bg-accent/10 text-accent-foreground border-accent/20',
-            muted: 'bg-muted/50 text-muted-foreground border-border'
-          };
-
-          const iconColorMap = {
-            primary: 'bg-primary/20 text-primary',
-            destructive: 'bg-destructive/20 text-destructive',
-            secondary: 'bg-secondary/20 text-secondary-foreground',
-            accent: 'bg-accent/20 text-accent-foreground',
-            muted: 'bg-muted text-muted-foreground'
-          };
-
-          return (
+        {/* Main Dashboard Content */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Left Column - Quick Actions & Tabs */}
+          <div className="lg:col-span-2 space-y-8">
+            {/* Quick Actions */}
             <motion.div
-              key={stat.title}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 + index * 0.1 }}
+              transition={{ delay: 0.2 }}
             >
-              <Card 
-                hover={true} 
-                className={`relative overflow-hidden cursor-pointer border-2 ${colorMap[stat.color as keyof typeof colorMap]} transition-all duration-300`}
-                onClick={stat.onClick}
-              >
-                <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-current/5 to-transparent rounded-full -translate-y-8 translate-x-8" />
-                <div className="relative">
-                  <div className="flex items-start justify-between">
+              <Card className="border-border/40">
+                <div className="p-6">
+                  {/* Card Header */}
+                  <div className="flex items-center justify-between mb-6 pb-4 border-b border-border/30">
                     <div>
-                      <p className="text-sm font-medium text-muted-foreground mb-2">{stat.title}</p>
-                      <div className="flex items-baseline gap-2">
-                        <p className="text-3xl font-bold text-foreground">{stat.value}</p>
-                        <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-                          stat.change.startsWith('+') 
-                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                            : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                        }`}>
-                          {stat.change}
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-2">{stat.description}</p>
+                      <h2 className="text-xl font-semibold text-foreground">Quick Actions</h2>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Frequently used admin tools and shortcuts
+                      </p>
                     </div>
-                    <div className={`p-3 rounded-lg ${iconColorMap[stat.color as keyof typeof iconColorMap]}`}>
-                      <stat.icon className="h-5 w-5" />
-                    </div>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      className="text-muted-foreground hover:text-foreground"
+                      onClick={handleViewAllActivities}
+                    >
+                      <Eye className="h-4 w-4 mr-2" />
+                      View Activity
+                    </Button>
                   </div>
-                  <div className="mt-4 flex items-center text-xs text-muted-foreground">
-                    <Clock className="h-3 w-3 mr-1" />
-                    <span>Updated just now</span>
+                  
+                  {/* Card Content */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {quickActions.map((action, index) => {
+                      const Icon = action.icon;
+                      
+                      return (
+                        <motion.button
+                          key={action.label}
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: 0.1 + index * 0.05 }}
+                          whileHover={{ y: -2, scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={action.onClick}
+                          className="group p-5 rounded-xl border border-border/50 hover:border-primary/30 hover:bg-primary/5 transition-all duration-300 cursor-pointer text-left"
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className={`p-3 rounded-lg ${
+                              action.color === 'primary' ? 'bg-primary/10 text-primary' :
+                              action.color === 'secondary' ? 'bg-secondary/10 text-secondary' :
+                              action.color === 'accent' ? 'bg-accent/10 text-accent' :
+                              'bg-muted text-muted-foreground'
+                            }`}>
+                              <Icon className="h-5 w-5" />
+                            </div>
+                            <div className="flex-1">
+                              <h3 className="font-medium text-foreground group-hover:text-primary transition-colors">
+                                {action.label}
+                              </h3>
+                              <p className="text-sm text-muted-foreground mt-1">
+                                {action.description}
+                              </p>
+                            </div>
+                            <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-transform" />
+                          </div>
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                  
+                  {/* Card Footer */}
+                  <div className="mt-6 pt-4 border-t border-border/30">
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      className="text-muted-foreground hover:text-foreground"
+                      onClick={handleViewAllActivities}
+                    >
+                      <Eye className="h-4 w-4 mr-2" />
+                      View all admin tools
+                    </Button>
                   </div>
                 </div>
               </Card>
             </motion.div>
-          );
-        })}
-      </motion.div>
 
-      {/* Quick Actions */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="mb-8"
-      >
-        <Card>
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-lg font-semibold text-foreground">Quick Actions</h2>
-              <p className="text-sm text-muted-foreground">Frequently used admin tools</p>
-            </div>
-            <Button 
-              variant="ghost" 
-              size="sm"
-              className="text-muted-foreground hover:text-foreground hover:bg-accent/50"
-              onClick={handleViewAllActivities}
+            {/* Tabs Navigation */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
             >
-              <Eye className="h-4 w-4 mr-2" />
-              View Activity
-            </Button>
-          </div>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {quickActions.map((action, index) => {
-              const colorMap = {
-                primary: 'border-primary/20 hover:border-primary/40 hover:bg-primary/5',
-                secondary: 'border-secondary/20 hover:border-secondary/40 hover:bg-secondary/5',
-                accent: 'border-accent/20 hover:border-accent/40 hover:bg-accent/5',
-                muted: 'border-border hover:border-border/80 hover:bg-muted/30'
-              };
+              <Card variant="outline" className="p-2">
+                <div className="flex flex-wrap gap-2">
+                  {tabs.map((tab) => {
+                    const isActive = activeTab === tab.id;
+                    const Icon = tab.icon;
+                    
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => {
+                          setActiveTab(tab.id as any);
+                          if (tab.id === 'rooms') {
+                            navigateTo('/admin/rooms');
+                          } else if (tab.id === 'instructors') {
+                            navigateTo('/admin/instructors');
+                          }
+                        }}
+                        className={`flex items-center space-x-2 px-5 py-3 rounded-lg font-medium transition-all duration-300 ${
+                          isActive
+                            ? 'bg-primary/10 text-primary border border-primary/20'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-accent/50 border border-transparent'
+                        }`}
+                      >
+                        <Icon className={`h-4 w-4 ${isActive ? 'text-primary' : ''}`} />
+                        <span>{tab.label}</span>
+                        {isActive && (
+                          <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </Card>
+            </motion.div>
 
-              const iconColorMap = {
-                primary: 'bg-primary/10 text-primary',
-                secondary: 'bg-secondary/10 text-secondary-foreground',
-                accent: 'bg-accent/10 text-accent-foreground',
-                muted: 'bg-muted text-muted-foreground'
-              };
+            {/* Main Content Area */}
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              id="schedules-section"
+              className="space-y-8"
+            >
+              {activeTab === 'overview' && (
+                <>
+                  {/* Conflict Alerts */}
+                  <ConflictAlert conflicts={conflicts} />
+                  
+                  {/* Bulk Upload Section */}
+                  <div id="bulk-upload-section">
+                    <BulkUpload />
+                  </div>
+                </>
+              )}
 
-              return (
-                <motion.button
-                  key={action.label}
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.1 + index * 0.1 }}
-                  whileHover={{ y: -2 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={action.onClick}
-                  className={`p-4 rounded-xl border-2 bg-card/50 ${colorMap[action.color as keyof typeof colorMap]} transition-all duration-300 cursor-pointer text-left`}
-                >
-                  <div className="flex flex-col space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className={`p-2 rounded-lg ${iconColorMap[action.color as keyof typeof iconColorMap]}`}>
-                        <action.icon className="h-5 w-5" />
+              {activeTab === 'schedules' && (
+                <Card className="border-border/40">
+                  <div className="p-6">
+                    {/* Card Header */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-border/30">
+                      <div>
+                        <h2 className="text-xl font-semibold text-foreground">Manage Schedules</h2>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          View, edit, and manage all class schedules
+                        </p>
                       </div>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      <div className="flex items-center gap-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          className="border-border/50"
+                          onClick={handleFilterSchedules}
+                        >
+                          <Filter className="h-4 w-4 mr-2" />
+                          Filter
+                        </Button>
+                        <Button 
+                          variant="outline"
+                          size="sm"
+                          className="border-border/50"
+                          onClick={handleExportSchedules}
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          Export
+                        </Button>
+                        <Button 
+                          size="sm"
+                          onClick={handleNewSchedule}
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Schedule
+                        </Button>
+                      </div>
                     </div>
-                    <div>
-                      <span className="font-medium text-foreground">{action.label}</span>
-                      <p className="text-xs text-muted-foreground mt-1">{action.description}</p>
+                    
+                    {/* Card Content */}
+                    <div className="rounded-lg border border-border/50 overflow-hidden">
+                      <ScheduleManager />
                     </div>
                   </div>
-                </motion.button>
-              );
-            })}
-          </div>
-        </Card>
-      </motion.div>
+                </Card>
+              )}
 
-      {/* Tabs Navigation */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        className="mb-8"
-      >
-        <Card variant="outline" className="!p-1">
-          <div className="flex space-x-1">
-            {tabs.map((tab) => {
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => {
-                    setActiveTab(tab.id as any);
-                    if (tab.id === 'rooms') {
-                      navigateTo('/admin/rooms');
-                    } else if (tab.id === 'instructors') {
-                      navigateTo('/admin/instructors');
-                    }
-                  }}
-                  className={`flex-1 flex items-center justify-center space-x-2 px-4 py-3 rounded-lg font-medium transition-all duration-300 ${
-                    isActive
-                      ? 'bg-primary/10 text-primary border border-primary/20'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
-                  }`}
-                >
-                  <tab.icon className={`h-4 w-4 ${isActive ? 'text-primary' : ''}`} />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </Card>
-      </motion.div>
-
-      {/* Main Content Area */}
-      <motion.div
-        key={activeTab}
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        id="schedules-section"
-      >
-        {activeTab === 'overview' && (
-          <div className="space-y-8">
-            {/* Conflict Alerts */}
-            <ConflictAlert conflicts={conflicts} />
-            
-            {/* Bulk Upload Section */}
-            <div id="bulk-upload-section">
-              <BulkUpload />
-            </div>
-            
-            {/* Recent Activity */}
-            <Card>
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h2 className="text-lg font-semibold text-foreground">Recent Activity</h2>
-                  <p className="text-sm text-muted-foreground">Latest schedule changes and updates</p>
-                </div>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  className="text-muted-foreground hover:text-foreground hover:bg-accent/50"
-                  onClick={handleViewAllActivities}
-                >
-                  <History className="h-4 w-4 mr-2" />
-                  View All
-                </Button>
-              </div>
-              
-              <div className="space-y-3">
-                {activityLogs.map((activity) => {
-                  const statusColor = {
-                    success: 'text-emerald-600 bg-emerald-500/10',
-                    warning: 'text-amber-600 bg-amber-500/10',
-                    error: 'text-destructive bg-destructive/10'
-                  };
-
-                  return (
-                    <div 
-                      key={activity.id}
-                      className="flex items-center justify-between p-4 rounded-lg hover:bg-accent/30 cursor-pointer transition-colors group"
-                      onClick={activity.onClick}
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className={`p-2 rounded-lg ${statusColor[activity.status as keyof typeof statusColor]}`}>
-                          <activity.icon className="h-4 w-4" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-foreground">
-                            <span className="font-semibold">{activity.user}</span> {activity.action}
-                          </p>
-                          <p className="text-sm text-muted-foreground">{activity.details}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm text-muted-foreground">{activity.time}</span>
-                        <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:translate-x-1 transition-transform" />
-                      </div>
+              {activeTab === 'rooms' && (
+                <Card className="border-border/40">
+                  <div className="p-12 text-center">
+                    <div className="mx-auto h-20 w-20 rounded-full bg-secondary/20 flex items-center justify-center mb-6">
+                      <Building className="h-10 w-10 text-secondary" />
                     </div>
-                  );
-                })}
-              </div>
-            </Card>
+                    <h3 className="text-xl font-semibold text-foreground mb-3">Room Management</h3>
+                    <p className="text-muted-foreground mb-8 max-w-md mx-auto">
+                      Manage room allocations, availability, and configurations across campus
+                    </p>
+                    <Button 
+                      onClick={() => navigateTo('/admin/rooms')}
+                    >
+                      Go to Room Management
+                    </Button>
+                  </div>
+                </Card>
+              )}
+
+              {activeTab === 'instructors' && (
+                <Card className="border-border/40">
+                  <div className="p-12 text-center">
+                    <div className="mx-auto h-20 w-20 rounded-full bg-accent/20 flex items-center justify-center mb-6">
+                      <Users className="h-10 w-10 text-accent" />
+                    </div>
+                    <h3 className="text-xl font-semibold text-foreground mb-3">Instructor Management</h3>
+                    <p className="text-muted-foreground mb-8 max-w-md mx-auto">
+                      View and manage instructor assignments, availability, and course loads
+                    </p>
+                    <Button 
+                      onClick={() => navigateTo('/admin/instructors')}
+                    >
+                      Go to Instructor Management
+                    </Button>
+                  </div>
+                </Card>
+              )}
+            </motion.div>
           </div>
-        )}
 
-        {activeTab === 'schedules' && (
-          <div>
-            <Card className="mb-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                <div>
-                  <h2 className="text-xl font-semibold text-foreground">Manage Schedules</h2>
-                  <p className="text-muted-foreground">View, edit, and manage all class schedules</p>
+          {/* Right Column - Recent Activity Feed */}
+          <div className="lg:col-span-1">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+            >
+              <Card className="border-border/40 h-full">
+                <div className="p-6 h-full flex flex-col">
+                  {/* Card Header */}
+                  <div className="flex items-center justify-between mb-6 pb-4 border-b border-border/30">
+                    <div>
+                      <h2 className="text-xl font-semibold text-foreground">Recent Activity</h2>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Latest system updates and changes
+                      </p>
+                    </div>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      className="h-8 w-8 p-0"
+                      onClick={handleViewAllActivities}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  
+                  {/* Card Content */}
+                  <div className="flex-1 overflow-y-auto">
+                    <div className="space-y-4">
+                      {activityLogs.map((activity) => {
+                        const Icon = activity.icon;
+                        const statusColor = {
+                          success: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
+                          warning: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
+                          error: 'bg-destructive/10 text-destructive border-destructive/20'
+                        };
+
+                        return (
+                          <motion.div
+                            key={activity.id}
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            whileHover={{ x: 4 }}
+                            className="group"
+                          >
+                            <div 
+                              className="p-4 rounded-lg border border-border/30 hover:border-border/60 hover:bg-accent/5 transition-all duration-300 cursor-pointer"
+                              onClick={activity.onClick}
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className={`p-2 rounded-lg ${statusColor[activity.status as keyof typeof statusColor]}`}>
+                                  <Icon className="h-4 w-4" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div>
+                                      <p className="font-medium text-foreground text-sm leading-tight">
+                                        <span className="font-semibold">{activity.user}</span>{' '}
+                                        {activity.action}
+                                      </p>
+                                      <p className="text-xs text-muted-foreground mt-1 truncate">
+                                        {activity.details}
+                                      </p>
+                                    </div>
+                                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                      {activity.time}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  
+                  {/* Card Footer */}
+                  <div className="mt-6 pt-4 border-t border-border/30">
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      className="w-full text-muted-foreground hover:text-foreground"
+                      onClick={handleViewAllActivities}
+                    >
+                      <History className="h-4 w-4 mr-2" />
+                      View all activity
+                      <ChevronRight className="h-4 w-4 ml-2" />
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <Button 
-                    variant="outline" 
-                    className="border-border text-foreground hover:bg-accent/50 hover:border-border/80"
-                    onClick={handleFilterSchedules}
-                  >
-                    <Filter className="h-4 w-4 mr-2" />
-                    Filter
-                  </Button>
-                  <Button 
-                    variant="outline"
-                    className="border-border text-foreground hover:bg-accent/50 hover:border-border/80"
-                    onClick={handleExportSchedules}
-                  >
-                    <Download className="h-4 w-4 mr-2" />
-                    Export
-                  </Button>
-                  <Button 
-                    className="bg-primary text-primary-foreground hover:bg-primary/90"
-                    onClick={handleNewSchedule}
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Schedule
-                  </Button>
-                </div>
-              </div>
-              
-              {/* Schedule Manager Component */}
-              <ScheduleManager />
-            </Card>
+              </Card>
+            </motion.div>
           </div>
-        )}
+        </div>
 
-        {activeTab === 'rooms' && (
-          <Card className="text-center py-12">
-            <div className="mx-auto h-16 w-16 rounded-full bg-secondary/20 flex items-center justify-center mb-4">
-              <Building className="h-8 w-8 text-secondary-foreground" />
-            </div>
-            <h3 className="text-lg font-semibold text-foreground mb-2">Room Management</h3>
-            <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-              Manage room allocations, availability, and configurations across campus
-            </p>
-            <Button 
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
-              onClick={() => navigateTo('/admin/rooms')}
-            >
-              Go to Room Management
-            </Button>
-          </Card>
-        )}
-
-        {activeTab === 'instructors' && (
-          <Card className="text-center py-12">
-            <div className="mx-auto h-16 w-16 rounded-full bg-accent/20 flex items-center justify-center mb-4">
-              <Users className="h-8 w-8 text-accent-foreground" />
-            </div>
-            <h3 className="text-lg font-semibold text-foreground mb-2">Instructor Management</h3>
-            <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-              View and manage instructor assignments, availability, and course loads
-            </p>
-            <Button 
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
-              onClick={() => navigateTo('/admin/instructors')}
-            >
-              Go to Instructor Management
-            </Button>
-          </Card>
-        )}
-      </motion.div>
+        {/* Bottom Spacing */}
+        <div className="h-12" />
+      </div>
     </div>
   );
 }
