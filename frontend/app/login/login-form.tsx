@@ -46,7 +46,7 @@ export function LoginForm({ role }: LoginFormProps) {
         localStorage.setItem('user', JSON.stringify(mockUser));
         
         // Redirect based on role
-        const redirectPath = role === 'student' ? '/dashboard' : '/admin';
+        const redirectPath = role === 'student' ? '/student' : '/admin';
         router.push(redirectPath);
       } else {
         setError('Please fill in all fields');
