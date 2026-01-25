@@ -9,11 +9,13 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-950">
+    <div className="min-h-screen bg-background text-foreground">
       <Navbar />
-      <div className="pt-16"> {/* 4rem padding for fixed navbar */}
-        {children}
-      </div>
+      <main className="pt-16">
+        <div className="bg-gradient-to-b from-background to-muted/20">
+          {children}
+        </div>
+      </main>
     </div>
   );
 }

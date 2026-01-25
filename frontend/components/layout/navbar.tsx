@@ -7,7 +7,7 @@ import {
   Menu, X, Calendar, LogOut, User, 
   Activity, Settings, ChevronDown, 
   Moon, Sun, Bell, Search, Sparkles, GraduationCap,
-  Shield, Building2
+  Shield, Building2, CalendarDays, Clock, ChevronRight
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -18,34 +18,33 @@ import { useTheme } from '../../hooks/use-theme';
 export const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showNotification, setShowNotification] = useState(false);
+  const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
 
-  // Fixed solid theme - NO GRADIENTS for maximum visibility
   const deptTheme = {
-    nav: "bg-emerald-700",
-    soft: "bg-emerald-50",
-    accent: "text-emerald-700",
-    logoFrom: "from-emerald-500",
-    logoTo: "to-emerald-700",
-    border: "border-emerald-900/30",
-    hover: "hover:bg-emerald-600",
-    dark: "bg-emerald-800",
-    darkBorder: "border-emerald-900/50",
-    active: "bg-emerald-600",
-    card: "bg-white dark:bg-gray-900",
-    shadow: "shadow-xl shadow-emerald-950/10",
+    nav: "bg-card border-border",
+    soft: "bg-accent",
+    accent: "text-primary",
+    logoFrom: "from-primary",
+    logoTo: "to-primary",
+    border: "border-border",
+    hover: "hover:bg-accent",
+    dark: "bg-card",
+    darkBorder: "border-border",
+    active: "bg-accent",
+    card: "bg-card",
+    shadow: "shadow-lg",
   };
 
   const menuItems = [
     { href: '/dashboard', label: 'Dashboard', icon: <Calendar size={18} /> },
-    { href: '/admin', label: 'Admin Panel', icon: <Shield size={18} /> },
+    { href: '/admin', label: 'Schedules', icon: <CalendarDays size={18} /> },
     { href: '/admin/activity-logs', label: 'Activity Logs', icon: <Activity size={18} /> },
     { href: '/admin/settings', label: 'System Settings', icon: <Settings size={18} /> },
   ];
 
-  // Handle notification
   useEffect(() => {
     const timer = setTimeout(() => {
       setShowNotification(true);
@@ -54,15 +53,30 @@ export const Navbar = () => {
     return () => clearTimeout(timer);
   }, []);
 
+  const closeDropdowns = () => {
+    setIsUserDropdownOpen(false);
+    setIsMenuOpen(false);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.user-dropdown') && !target.closest('.user-menu-button')) {
+        setIsUserDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
+
   return (
     <>
-      {/* Navigation Bar - FIXED: Removed scroll hide logic */}
       <motion.nav
-      
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className={`fixed top-0 left-0 right-0 z-50 ${theme === 'dark' ? deptTheme.dark : deptTheme.nav} border-b ${theme === 'dark' ? deptTheme.darkBorder : deptTheme.border} ${deptTheme.shadow}`}
+        className={`fixed top-0 left-0 right-0 z-50 ${deptTheme.nav} border-b ${deptTheme.border} ${deptTheme.shadow}`}
       >
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between">
@@ -72,10 +86,10 @@ export const Navbar = () => {
                 <motion.div
                   whileHover={{ rotate: 360 }}
                   transition={{ duration: 0.6 }}
-                  className={`relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${deptTheme.logoFrom} ${deptTheme.logoTo} group-hover:${deptTheme.hover} transition-all duration-500 shadow-lg border border-emerald-500/30`}
+                  className={`relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${deptTheme.logoFrom} ${deptTheme.logoTo} group-hover:${deptTheme.hover} transition-all duration-500 border border-primary/30`}
                 >
-                  <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/30 to-transparent" />
-                  <GraduationCap className="h-6 w-6 text-white" />
+                  <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/20 dark:from-black/10 to-transparent" />
+                  <GraduationCap className="h-6 w-6 text-primary-foreground" />
                   <motion.div
                     animate={{ scale: [1, 1.1, 1] }}
                     transition={{ duration: 3, repeat: Infinity }}
@@ -89,16 +103,16 @@ export const Navbar = () => {
                   className="relative"
                 >
                   <div className="flex items-center gap-2">
-                    <h1 className="text-xl font-bold text-white tracking-tight">
+                    <h1 className="text-xl font-bold text-foreground tracking-tight">
                       ScheduleFlow
                     </h1>
-                    <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-emerald-600/40 text-emerald-200 rounded border border-emerald-500/30">
+                    <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-primary/10 text-primary rounded border border-primary/30">
                       ADMIN
                     </span>
                   </div>
                   <div className="flex items-center space-x-2 mt-0.5">
-                    <Building2 className="h-3 w-3 text-emerald-300" />
-                    <p className="text-xs font-medium text-emerald-200">
+                    <Building2 className="h-3 w-3 text-muted-foreground" />
+                    <p className="text-xs font-medium text-muted-foreground">
                       Holy Trinity University
                     </p>
                   </div>
@@ -117,16 +131,16 @@ export const Navbar = () => {
                         transition={{ delay: 0.1 + index * 0.1 }}
                         className={`relative px-4 py-2.5 rounded-lg transition-all duration-300 flex items-center space-x-2.5 ${
                           isActive 
-                            ? `${deptTheme.active} text-white shadow-lg shadow-emerald-900/30`
-                            : 'text-emerald-100 hover:bg-emerald-600/50 hover:text-white'
+                            ? `${deptTheme.active} text-foreground shadow-md`
+                            : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                         } border ${
                           isActive 
-                            ? 'border-emerald-500/50' 
+                            ? 'border-primary/50' 
                             : 'border-transparent'
                         }`}
                       >
                         <div className="flex items-center space-x-2.5">
-                          <div className={`${isActive ? 'text-white' : 'text-emerald-300'}`}>
+                          <div className={`${isActive ? 'text-primary' : 'text-muted-foreground'}`}>
                             {item.icon}
                           </div>
                           <span className="font-semibold text-sm">{item.label}</span>
@@ -134,7 +148,7 @@ export const Navbar = () => {
                         {isActive && (
                           <motion.div
                             layoutId="activeTab"
-                            className="absolute -bottom-1.5 left-1/2 transform -translate-x-1/2 w-8 h-0.5 rounded-full bg-emerald-300 shadow-sm shadow-emerald-300"
+                            className="absolute -bottom-1.5 left-1/2 transform -translate-x-1/2 w-8 h-0.5 rounded-full bg-primary"
                           />
                         )}
                       </motion.div>
@@ -150,7 +164,7 @@ export const Navbar = () => {
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                className="hidden md:flex items-center justify-center h-10 w-10 rounded-xl bg-emerald-600/40 hover:bg-emerald-600/60 text-emerald-100 border border-emerald-500/30 transition-colors"
+                className="hidden md:flex items-center justify-center h-10 w-10 rounded-xl bg-accent text-muted-foreground hover:text-foreground hover:bg-accent/80 border border-border transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20"
               >
                 <Search className="h-5 w-5" />
               </motion.button>
@@ -160,14 +174,14 @@ export const Navbar = () => {
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  className="flex items-center justify-center h-10 w-10 rounded-xl bg-emerald-600/40 hover:bg-emerald-600/60 text-emerald-100 border border-emerald-500/30 transition-colors"
+                  className="flex items-center justify-center h-10 w-10 rounded-xl bg-accent text-muted-foreground hover:text-foreground hover:bg-accent/80 border border-border transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20"
                 >
                   <Bell className="h-5 w-5" />
                   {showNotification && (
                     <motion.span
                       initial={{ scale: 0 }}
                       animate={{ scale: 1 }}
-                      className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-amber-400 border-2 border-emerald-700 shadow-sm"
+                      className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-destructive border-2 border-card"
                     />
                   )}
                 </motion.button>
@@ -175,10 +189,20 @@ export const Navbar = () => {
 
               {/* Theme Toggle */}
               <motion.button
-                whileHover={{ scale: 1.05, rotate: 180 }}
+                whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                onClick={toggleTheme}
-                className="flex items-center justify-center h-10 w-10 rounded-xl bg-emerald-600/40 hover:bg-emerald-600/60 text-emerald-100 border border-emerald-500/30 transition-colors"
+                onClick={() => {
+                  toggleTheme();
+                  setTimeout(() => {
+                    const themeToggleBtn = document.querySelector('[data-theme-toggle]');
+                    themeToggleBtn?.classList.add('rotate-full');
+                    setTimeout(() => {
+                      themeToggleBtn?.classList.remove('rotate-full');
+                    }, 600);
+                  }, 0);
+                }}
+                data-theme-toggle
+                className="flex items-center justify-center h-10 w-10 rounded-xl bg-accent text-muted-foreground hover:text-foreground hover:bg-accent/80 border border-border transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20"
               >
                 <AnimatePresence mode="wait">
                   <motion.div
@@ -186,12 +210,13 @@ export const Navbar = () => {
                     initial={{ opacity: 0, rotate: -180 }}
                     animate={{ opacity: 1, rotate: 0 }}
                     exit={{ opacity: 0, rotate: 180 }}
-                    transition={{ duration: 0.2 }}
+                    transition={{ duration: 0.3 }}
+                    className="flex items-center justify-center"
                   >
                     {theme === 'dark' ? (
-                      <Sun className="h-5 w-5 text-amber-300" />
+                      <Sun className="h-5 w-5" />
                     ) : (
-                      <Moon className="h-5 w-5 text-emerald-200" />
+                      <Moon className="h-5 w-5" />
                     )}
                   </motion.div>
                 </AnimatePresence>
@@ -202,101 +227,137 @@ export const Navbar = () => {
                 <motion.div 
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  className="relative group"
+                  className="relative user-dropdown"
                 >
                   <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    className="flex items-center space-x-3 rounded-xl px-3 py-1.5 hover:bg-emerald-600/40 border border-emerald-500/30 transition-colors"
+                    onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
+                    className="user-menu-button flex items-center space-x-3 rounded-xl px-3 py-1.5 hover:bg-accent border border-border transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20"
                   >
                     <motion.div
                       whileHover={{ rotate: 360 }}
                       transition={{ duration: 0.6 }}
-                      className={`relative h-8 w-8 rounded-lg bg-gradient-to-br ${deptTheme.logoFrom} ${deptTheme.logoTo} flex items-center justify-center shadow-md`}
+                      className={`relative h-8 w-8 rounded-lg bg-gradient-to-br ${deptTheme.logoFrom} ${deptTheme.logoTo} flex items-center justify-center border border-primary/30`}
                     >
-                      <span className="text-white text-sm font-bold">
+                      <span className="text-primary-foreground text-sm font-bold">
                         {user.first_name?.[0] || user.email?.[0]}
                       </span>
-                      <div className={`absolute -inset-1 rounded-lg ${deptTheme.logoFrom}/30 blur-sm`} />
+                      <div className={`absolute -inset-1 rounded-lg ${deptTheme.logoFrom}/20 blur-sm`} />
                     </motion.div>
                     <div className="hidden lg:block text-left">
-                      <p className="text-sm font-semibold text-white leading-tight">
+                      <p className="text-sm font-semibold text-foreground leading-tight">
                         {user.first_name} {user.last_name?.[0]}.
                       </p>
-                      <p className="text-xs text-emerald-200">
+                      <p className="text-xs text-muted-foreground">
                         {user.role.replace('_', ' ')}
                       </p>
                     </div>
-                    <ChevronDown size={16} className="text-emerald-300" />
+                    <ChevronDown size={16} className="text-muted-foreground" />
                   </motion.button>
                   
                   {/* Dropdown Menu */}
-                  <motion.div
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{ opacity: 0, y: 10, scale: 0.95 }}
-                    whileHover={{ opacity: 1, y: 0, scale: 1 }}
-                    className="absolute right-0 top-full mt-2 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity z-50"
-                  >
-                    <motion.div
-                      initial={{ opacity: 0, y: -20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className={`rounded-xl shadow-2xl border min-w-[260px] overflow-hidden ${deptTheme.card} border-gray-300 dark:border-gray-800`}
-                    >
-                      {/* User Info */}
-                      <div className="p-4 border-b border-gray-200 dark:border-gray-800 bg-gradient-to-r from-emerald-50 to-emerald-100/30 dark:from-emerald-950/30 dark:to-emerald-900/30">
-                        <div className="flex items-center space-x-3">
-                          <div className={`h-12 w-12 rounded-lg bg-gradient-to-br ${deptTheme.logoFrom} ${deptTheme.logoTo} flex items-center justify-center shadow-md`}>
-                            <span className="text-white font-bold text-lg">
-                              {user.first_name?.[0] || user.email?.[0]}
-                            </span>
-                          </div>
-                          <div>
-                            <p className="font-bold text-gray-900 dark:text-white">
-                              {user.first_name} {user.last_name}
-                            </p>
-                            <p className="text-sm text-gray-600 dark:text-gray-300">
-                              {user.email}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="mt-3">
-                          <span className={`inline-flex items-center px-3 py-1 rounded-lg text-xs font-bold ${deptTheme.soft} ${deptTheme.accent} border border-emerald-200 dark:border-emerald-800`}>
-                            <Shield className="h-3 w-3 mr-1.5" />
-                            {user.role.replace('_', ' ').toUpperCase()}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Menu Items */}
-                      <div className="py-2">
-                        <Link href="/profile">
-                          <button className="flex w-full items-center space-x-3 px-4 py-3 text-sm transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 border-l-4 border-transparent hover:border-emerald-500">
-                            <User size={18} className="text-gray-500 dark:text-gray-400" />
-                            <span className="font-medium">Profile Settings</span>
-                          </button>
-                        </Link>
-                      </div>
-
-                      {/* Logout */}
-                      <div className="border-t border-gray-200 dark:border-gray-800 p-2">
-                        <button
-                          onClick={logout}
-                          className="flex w-full items-center justify-center space-x-2 px-4 py-2.5 text-sm font-medium transition-colors rounded-lg bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/30 text-red-700 dark:text-red-400"
+                  <AnimatePresence>
+                    {isUserDropdownOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                        transition={{ duration: 0.2 }}
+                        className="absolute right-0 top-full mt-2 z-50"
+                      >
+                        <motion.div
+                          className={`rounded-xl shadow-xl border min-w-[260px] overflow-hidden ${deptTheme.card} border-border`}
                         >
-                          <LogOut size={16} />
-                          <span>Sign Out</span>
-                        </button>
-                      </div>
-                    </motion.div>
-                  </motion.div>
+                          {/* User Info */}
+                          <div className="p-4 border-b border-border bg-gradient-to-r from-accent/30 to-accent/10">
+                            <div className="flex items-center space-x-3">
+                              <div className={`h-12 w-12 rounded-lg bg-gradient-to-br ${deptTheme.logoFrom} ${deptTheme.logoTo} flex items-center justify-center border border-primary/30`}>
+                                <span className="text-primary-foreground font-bold text-lg">
+                                  {user.first_name?.[0] || user.email?.[0]}
+                                </span>
+                              </div>
+                              <div>
+                                <p className="font-bold text-foreground">
+                                  {user.first_name} {user.last_name}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  {user.email}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="mt-3">
+                              <span className={`inline-flex items-center px-3 py-1 rounded-lg text-xs font-bold bg-primary/10 text-primary border border-primary/20`}>
+                                <Shield className="h-3 w-3 mr-1.5" />
+                                {user.role.replace('_', ' ').toUpperCase()}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Quick Actions */}
+                          <div className="py-2">
+                            <div className="px-3 py-2">
+                              <p className="text-xs font-medium text-muted-foreground mb-2">QUICK ACTIONS</p>
+                              <div className="space-y-1">
+                                <Link href="/admin/create-schedule" onClick={closeDropdowns}>
+                                  <div className="flex items-center justify-between p-2 rounded-lg hover:bg-accent transition-colors cursor-pointer">
+                                    <div className="flex items-center space-x-3">
+                                      <div className="p-1.5 rounded-md bg-primary/10">
+                                        <Clock className="h-4 w-4 text-primary" />
+                                      </div>
+                                      <span className="text-sm font-medium text-foreground">Create Schedule</span>
+                                    </div>
+                                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                  </div>
+                                </Link>
+                                <Link href="/admin/conflicts" onClick={closeDropdowns}>
+                                  <div className="flex items-center justify-between p-2 rounded-lg hover:bg-accent transition-colors cursor-pointer">
+                                    <div className="flex items-center space-x-3">
+                                      <div className="p-1.5 rounded-md bg-destructive/10">
+                                        <Shield className="h-4 w-4 text-destructive" />
+                                      </div>
+                                      <span className="text-sm font-medium text-foreground">View Conflicts</span>
+                                    </div>
+                                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                  </div>
+                                </Link>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Menu Items */}
+                          <div className="py-2 border-t border-border">
+                            <Link href="/profile" onClick={closeDropdowns}>
+                              <div className="flex items-center space-x-3 px-4 py-3 text-sm transition-colors hover:bg-accent text-foreground cursor-pointer">
+                                <User size={18} className="text-muted-foreground" />
+                                <span className="font-medium">Profile Settings</span>
+                              </div>
+                            </Link>
+                          </div>
+
+                          {/* Logout */}
+                          <div className="border-t border-border p-2 bg-accent/10">
+                            <button
+                              onClick={() => {
+                                logout();
+                                closeDropdowns();
+                              }}
+                              className="flex w-full items-center justify-center space-x-2 px-4 py-2.5 text-sm font-medium transition-colors rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive focus:outline-none focus:ring-2 focus:ring-destructive/20"
+                            >
+                              <LogOut size={16} />
+                              <span>Sign Out</span>
+                            </button>
+                          </div>
+                        </motion.div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </motion.div>
               ) : (
-                <Link href="/login">
+                <Link href="/login" onClick={closeDropdowns}>
                   <motion.div
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                   >
-                    <Button className="bg-white text-emerald-800 hover:bg-emerald-50 hover:text-emerald-900 border-2 border-emerald-300 font-semibold shadow-md">
+                    <Button className="bg-primary text-primary-foreground hover:bg-primary/90 border-2 border-primary font-semibold shadow-md focus:outline-none focus:ring-2 focus:ring-primary/20">
                       Sign In
                     </Button>
                   </motion.div>
@@ -308,7 +369,7 @@ export const Navbar = () => {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className="lg:hidden p-2 rounded-xl hover:bg-emerald-600/40 text-white border border-emerald-500/30 ml-2"
+                className="lg:hidden p-2 rounded-xl hover:bg-accent text-foreground border border-border focus:outline-none focus:ring-2 focus:ring-primary/20 ml-2"
               >
                 {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
               </motion.button>
@@ -323,7 +384,7 @@ export const Navbar = () => {
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
-              className="lg:hidden border-t border-emerald-800/40 bg-emerald-800/95 backdrop-blur-xl"
+              className="lg:hidden border-t border-border bg-card/95 backdrop-blur-xl"
             >
               <div className="px-4 py-3 space-y-1">
                 {menuItems.map((item, index) => {
@@ -339,32 +400,32 @@ export const Navbar = () => {
                         href={item.href}
                         className={`flex items-center space-x-3 p-3.5 rounded-xl transition-all ${
                           isActive
-                            ? 'bg-emerald-600 text-white shadow-md shadow-emerald-900/30'
-                            : 'text-emerald-100 hover:bg-emerald-700/70'
-                        } border ${isActive ? 'border-emerald-500/50' : 'border-transparent'}`}
-                        onClick={() => setIsMenuOpen(false)}
+                            ? 'bg-accent text-foreground shadow-md'
+                            : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                        } border ${isActive ? 'border-primary/50' : 'border-transparent'}`}
+                        onClick={closeDropdowns}
                       >
-                        <div className={`${isActive ? 'text-white' : 'text-emerald-300'}`}>
+                        <div className={`${isActive ? 'text-primary' : 'text-muted-foreground'}`}>
                           {item.icon}
                         </div>
                         <span className="font-semibold">{item.label}</span>
                         {isActive && (
-                          <div className="ml-auto h-2 w-2 rounded-full bg-emerald-300 animate-pulse" />
+                          <div className="ml-auto h-2 w-2 rounded-full bg-primary animate-pulse" />
                         )}
                       </Link>
                     </motion.div>
                   );
                 })}
-                <div className="pt-4 border-t border-emerald-800/40">
-                  <div className="p-3.5 rounded-xl bg-emerald-700/40 border border-emerald-600/30">
-                    <p className="text-sm font-medium text-emerald-200">
+                <div className="pt-4 border-t border-border">
+                  <div className="p-3.5 rounded-xl bg-accent/40 border border-border">
+                    <p className="text-sm font-medium text-muted-foreground">
                       Currently viewing as
                     </p>
                     <div className="flex items-center justify-between mt-1">
-                      <p className="text-xs font-semibold text-emerald-100">
+                      <p className="text-xs font-semibold text-foreground">
                         {user?.role.replace('_', ' ') || 'Guest User'}
                       </p>
-                      <Sparkles className="h-3 w-3 text-emerald-300 animate-pulse" />
+                      <Sparkles className="h-3 w-3 text-primary animate-pulse" />
                     </div>
                   </div>
                 </div>
@@ -374,6 +435,17 @@ export const Navbar = () => {
         </AnimatePresence>
       </motion.nav>
 
+      {/* Add custom styles for smooth theme toggle rotation */}
+      <style jsx global>{`
+        @keyframes rotate-full {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        
+        .rotate-full {
+          animation: rotate-full 0.6s ease-in-out;
+        }
+      `}</style>
     </>
   );
 };
