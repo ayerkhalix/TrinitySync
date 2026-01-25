@@ -1,6 +1,7 @@
-/* styles/globals.css */
+/* app/globals.css */
 @import "tailwindcss";
 
+/* Define your theme variables FIRST */
 :root {
   --background: 0 0% 100%;
   --foreground: 222.2 84% 4.9%;
@@ -14,24 +15,17 @@
   --secondary-foreground: 220.9 39.3% 11%;
   --muted: 220 14.3% 95.9%;
   --muted-foreground: 220 8.9% 46.1%;
-  --accent: 142 76% 36%;
-  --accent-foreground: 355.7 100% 97.3%;
+  --accent: 220 14.3% 95.9%;
+  --accent-foreground: 220.9 39.3% 11%;
   --destructive: 0 84.2% 60.2%;
   --destructive-foreground: 210 20% 98%;
   --border: 220 13% 91%;
   --input: 220 13% 91%;
   --ring: 142 76% 36%;
   --radius: 0.75rem;
-  --sidebar: 0 0% 98%;
-  --sidebar-foreground: 240 5.3% 26.1%;
-  --sidebar-primary: 142 76% 36%;
-  --sidebar-primary-foreground: 0 0% 98%;
-  --sidebar-accent: 240 4.8% 95.9%;
-  --sidebar-accent-foreground: 240 5.9% 10%;
-  --sidebar-border: 220 13% 91%;
-  --sidebar-ring: 217.2 91.2% 59.8%;
 }
 
+/* Dark mode variables - triggered by .dark class on <html> */
 .dark {
   --background: 222.2 84% 4.9%;
   --foreground: 210 40% 98%;
@@ -40,28 +34,21 @@
   --popover: 222.2 84% 4.9%;
   --popover-foreground: 210 40% 98%;
   --primary: 142 76% 36%;
-  --primary-foreground: 222.2 47.4% 11.2%;
+  --primary-foreground: 144.9 80.4% 10%;
   --secondary: 217.2 32.6% 17.5%;
   --secondary-foreground: 210 40% 98%;
   --muted: 217.2 32.6% 17.5%;
   --muted-foreground: 215 20.2% 65.1%;
-  --accent: 142 76% 36%;
-  --accent-foreground: 222.2 47.4% 11.2%;
+  --accent: 217.2 32.6% 17.5%;
+  --accent-foreground: 210 40% 98%;
   --destructive: 0 62.8% 30.6%;
   --destructive-foreground: 210 40% 98%;
   --border: 217.2 32.6% 17.5%;
   --input: 217.2 32.6% 17.5%;
   --ring: 142 76% 36%;
-  --sidebar: 240 5.9% 10%;
-  --sidebar-foreground: 240 4.8% 95.9%;
-  --sidebar-primary: 224.3 76.3% 48%;
-  --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 240 3.7% 15.9%;
-  --sidebar-accent-foreground: 240 4.8% 95.9%;
-  --sidebar-border: 240 3.7% 15.9%;
-  --sidebar-ring: 217.2 91.2% 59.8%;
 }
 
+/* Map variables to Tailwind theme */
 @theme {
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
@@ -85,6 +72,7 @@
   --radius: var(--radius);
 }
 
+/* Base styles */
 * {
   border-color: hsl(var(--border));
 }
@@ -100,252 +88,47 @@ body {
   min-height: 100vh;
 }
 
-/* Ensure proper stacking context */
-#__next {
-  min-height: 100vh;
-  isolation: isolate;
+/* Custom utility classes using CSS variables */
+.bg-background {
+  background-color: hsl(var(--background));
 }
 
-/* Fix for fixed navbar spacing */
-main {
-  padding-top: 4rem; /* 64px - matches navbar height */
+.text-foreground {
+  color: hsl(var(--foreground));
 }
 
-/* Glass card styles */
-.glass-card {
-  background-color: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(229, 231, 235, 0.5);
-  
-  .dark & {
-    background-color: rgba(17, 24, 39, 0.8);
-    border-color: rgba(55, 65, 81, 0.5);
-  }
-}
-
-/* Smooth transition */
-.smooth-transition {
-  transition-property: all;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 300ms;
-}
-
-/* Gradient styles */
-.gradient-primary {
-  background-image: linear-gradient(to right, #059669, #047857);
-}
-
-.gradient-accent {
-  background-image: linear-gradient(to right, #059669, #10b981);
-}
-
-/* Admin-specific styles */
-.admin-gradient {
-  background-image: linear-gradient(135deg, #047857 0%, #059669 50%, #10b981 100%);
-}
-
-.admin-card {
+.bg-card {
   background-color: hsl(var(--card));
+}
+
+.text-card-foreground {
   color: hsl(var(--card-foreground));
-  border-radius: calc(var(--radius) + 2px);
+}
+
+.border-border {
+  border-color: hsl(var(--border));
+}
+
+/* Fix for navbar */
+main {
+  padding-top: 4rem;
+}
+
+/* Glass card replacement */
+.glass-card {
+  background-color: hsl(var(--card));
   border: 1px solid hsl(var(--border));
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.08);
+  border-radius: var(--radius);
+  backdrop-filter: blur(20px);
 }
 
-.admin-panel {
-  background-image: linear-gradient(135deg, hsl(var(--background)) 0%, hsl(var(--muted)) 100%);
-  min-height: 100vh;
+/* Manual dark mode toggle test */
+.test-light {
+  background-color: white !important;
+  color: black !important;
 }
 
-/* Gradient animation */
-.animate-gradient {
-  background-size: 200% 200%;
-  animation: gradient 8s ease infinite;
-}
-
-@keyframes gradient {
-  0%, 100% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-}
-
-/* Hide scrollbar */
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-  
-  &::-webkit-scrollbar {
-    display: none;
-  }
-}
-
-/* Smooth glass effect */
-.glass {
-  backdrop-filter: blur(12px);
-  background-color: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  
-  .dark & {
-    background-color: rgba(17, 24, 39, 0.1);
-    border-color: rgba(55, 65, 81, 0.2);
-  }
-}
-
-/* Custom scrollbar */
-.custom-scrollbar {
-  &::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-  
-  &::-webkit-scrollbar-track {
-    background-color: hsl(var(--muted));
-    border-radius: 3px;
-  }
-  
-  &::-webkit-scrollbar-thumb {
-    background-color: hsl(var(--muted-foreground));
-    border-radius: 3px;
-    
-    &:hover {
-      background-color: hsl(var(--foreground));
-    }
-  }
-}
-
-/* Text gradient */
-.text-gradient {
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-image: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--accent)) 100%);
-}
-
-/* Border gradient */
-.border-gradient {
-  border: double 2px transparent;
-  background-image: linear-gradient(hsl(var(--background)), hsl(var(--background))), 
-                    linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)));
-  background-origin: border-box;
-  background-clip: padding-box, border-box;
-}
-
-/* Pulse animation for notifications */
-.animate-pulse-slow {
-  animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.7;
-  }
-}
-
-/* Shimmer effect */
-.shimmer {
-  background-image: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.1) 50%,
-    transparent 100%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 2s infinite;
-}
-
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
-}
-
-/* Floating animation */
-.animate-float {
-  animation: float 6s ease-in-out infinite;
-}
-
-@keyframes float {
-  0%, 100% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-12px);
-  }
-}
-
-/* Fix for fixed elements */
-.fixed-inset {
-  position: fixed;
-  inset: 0;
-}
-
-/* Ensure content doesn't hide behind navbar */
-.scroll-mt-16 {
-  scroll-margin-top: 4rem;
-}
-
-.scroll-mt-20 {
-  scroll-margin-top: 5rem;
-}
-
-/* Custom scrollbar for the whole page */
-@media (min-width: 768px) {
-  ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
-  }
-
-  ::-webkit-scrollbar-track {
-    background-color: hsl(var(--muted));
-  }
-
-  ::-webkit-scrollbar-thumb {
-    background-color: hsl(var(--muted-foreground));
-    border-radius: 5px;
-    
-    &:hover {
-      background-color: hsl(var(--foreground));
-    }
-  }
-
-  ::-webkit-scrollbar-corner {
-    background-color: hsl(var(--muted));
-  }
-}
-
-/* Selection color */
-::selection {
-  background-color: hsl(var(--primary));
-  color: hsl(var(--primary-foreground));
-}
-
-/* Focus outline */
-:focus-visible {
-  outline: 2px solid hsl(var(--ring));
-  outline-offset: 2px;
-}
-
-/* Print styles */
-@media print {
-  .no-print {
-    display: none !important;
-  }
-  
-  body {
-    background-color: white !important;
-    color: black !important;
-  }
-  
-  .break-inside-avoid {
-    break-inside: avoid;
-  }
+.test-dark {
+  background-color: #111827 !important;
+  color: white !important;
 }
