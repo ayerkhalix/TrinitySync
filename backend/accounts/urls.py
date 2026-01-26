@@ -13,4 +13,6 @@ router.register(r'staff', views.StaffProfileViewSet, basename='staff')
 urlpatterns = [
     path('', include(router.urls)),
     path('me/', views.CurrentUserView.as_view(), name='current-user'),
+    path('register/', views.register_user, name='register-user'),
+    path('change-password/', views.ChangePasswordView.as_view(), name='change-password'),
 ]
