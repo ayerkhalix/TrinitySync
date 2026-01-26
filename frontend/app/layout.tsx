@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/hooks/use-theme";
+import { Toaster } from "sonner";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -38,6 +39,17 @@ export default function RootLayout({
       <body className={`${inter.className}`}>
         <ThemeProvider>
           {children}
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              classNames: {
+                toast: 'bg-white text-gray-900 border border-gray-200 shadow-lg',
+                description: 'text-gray-600',
+                actionButton: 'bg-gray-900 text-white',
+                cancelButton: 'bg-gray-100 text-gray-700',
+              },
+            }}
+          />
         </ThemeProvider>
       </body>
     </html>

@@ -1,110 +1,119 @@
+# accounts/serializers.py (ADD these at the end)
 """
 Serializers for the accounts app.
 """
 from rest_framework import serializers
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth import get_user_model
+from django.contrib.auth import authenticate
 from .models import UserProfile, StudentProfile, StaffProfile, UserRole
 from colleges.models import College, Program
 
 User = get_user_model()
 
+# ... [keep all your existing serializers above] ...
 
-class UserProfileSerializer(serializers.ModelSerializer):
-    full_name = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = UserProfile
-        fields = [
-            'id', 'supabase_uid', 'email', 'role', 'full_name',
-            'is_active', 'email_verified', 'phone_number',
-            'avatar_url', 'metadata', 'created_at', 'updated_at'
-        ]
-        read_only_fields = ['id', 'supabase_uid', 'created_at', 'updated_at']
-    
-    def get_full_name(self, obj):
-        # In a real implementation, you might store first/last name
-        # For now, use email prefix
-        return obj.email.split('@')[0].replace('.', ' ').title()
-
-
-class StudentProfileSerializer(serializers.ModelSerializer):
-    user_email = serializers.EmailField(source='user.email', read_only=True)
-    user_role = serializers.CharField(source='user.role', read_only=True)
-    college_name = serializers.CharField(source='college.name', read_only=True)
-    program_name = serializers.CharField(source='program.name', read_only=True)
-    
-    class Meta:
-        model = StudentProfile
-        fields = [
-            'id', 'user', 'user_email', 'user_role',
-            'student_id', 'college', 'college_name',
-            'program', 'program_name', 'year_level',
-            'section', 'admission_year', 'expected_graduation',
-            'is_graduated'
-        ]
-        read_only_fields = ['id']
-
-
-class StaffProfileSerializer(serializers.ModelSerializer):
-    user_email = serializers.EmailField(source='user.email', read_only=True)
-    user_role = serializers.CharField(source='user.role', read_only=True)
-    college_name = serializers.CharField(source='college.name', read_only=True, allow_null=True)
-    
-    class Meta:
-        model = StaffProfile
-        fields = [
-            'id', 'user', 'user_email', 'user_role',
-            'employee_id', 'college', 'college_name',
-            'position', 'department', 'is_college_admin',
-            'is_super_admin', 'office_location', 'office_hours',
-            'expertise'
-        ]
-        read_only_fields = ['id']
-
-
-class UserRegistrationSerializer(serializers.Serializer):
+class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
     """
-    Serializer for user registration.
+    Custom token serializer that accepts email instead of username.
     """
     email = serializers.EmailField(required=True)
-    password = serializers.CharField(write_only=True, required=True, min_length=8)
-    role = serializers.ChoiceField(choices=UserRole.choices, default=UserRole.STUDENT)
+    password = serializers.CharField(write_only=True, required=True)
     
-    def validate_email(self, value):
-        if UserProfile.objects.filter(email=value).exists():
-            raise serializers.ValidationError("A user with this email already exists.")
-        return value
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields.pop('username', None)
+        self.fields['email'] = serializers.EmailField(required=True)
     
-    def create(self, validated_data):
-        # Create Django user
-        user = User.objects.create_user(
-            username=validated_data['email'],
-            email=validated_data['email'],
-            password=validated_data['password']
-        )
+    def validate(self, attrs):
+        email = attrs.get('email')
+        password = attrs.get('password')
         
-        # Create user profile
-        user_profile = UserProfile.objects.create(
-            email=validated_data['email'],
-            role=validated_data['role'],
-            is_active=True,
-            email_verified=False
-        )
+        # Try to find user profile by email
+        try:
+            user_profile = UserProfile.objects.get(email=email)
+            user = user_profile.user
+            
+            # Authenticate using Django's authenticate
+            auth_user = authenticate(username=user.username, password=password)
+            
+            if auth_user is None:
+                raise serializers.ValidationError({
+                    'password': 'Invalid password'
+                })
+            
+            # Add username to attrs for token generation
+            attrs['username'] = user.username
+            
+        except UserProfile.DoesNotExist:
+            # If not found by email, try as username
+            try:
+                user = User.objects.get(username=email)
+                user_profile = user.profile
+                
+                auth_user = authenticate(username=user.username, password=password)
+                
+                if auth_user is None:
+                    raise serializers.ValidationError({
+                        'password': 'Invalid password'
+                    })
+                
+                attrs['username'] = user.username
+                
+            except (User.DoesNotExist, AttributeError):
+                raise serializers.ValidationError({
+                    'email': 'No user found with this email or username'
+                })
         
-        return user_profile
-
-
-class ChangePasswordSerializer(serializers.Serializer):
-    """
-    Serializer for password change.
-    """
-    old_password = serializers.CharField(required=True, write_only=True)
-    new_password = serializers.CharField(required=True, write_only=True, min_length=8)
-    confirm_password = serializers.CharField(required=True, write_only=True)
-    
-    def validate(self, data):
-        if data['new_password'] != data['confirm_password']:
-            raise serializers.ValidationError({
-                'confirm_password': 'Passwords do not match.'
-            })
+        # Call parent validate to generate token
+        data = super().validate(attrs)
+        
+        # Add user data to response
+        refresh = self.get_token(auth_user)
+        
+        user_data = {
+            'id': user_profile.id,
+            'email': user_profile.email,
+            'role': user_profile.role,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+        }
+        
+        # Add student profile if exists
+        if hasattr(user_profile, 'student_profile'):
+            student = user_profile.student_profile
+            user_data['student_profile'] = {
+                'student_id': student.student_id,
+                'college': student.college.name if student.college else None,
+                'program': student.program.name if student.program else None,
+                'year_level': student.year_level,
+                'section': student.section,
+            }
+        
+        # Add staff profile if exists
+        if hasattr(user_profile, 'staff_profile'):
+            staff = user_profile.staff_profile
+            user_data['staff_profile'] = {
+                'employee_id': staff.employee_id,
+                'position': staff.position,
+                'department': staff.department,
+                'is_college_admin': staff.is_college_admin,
+                'is_super_admin': staff.is_super_admin,
+            }
+        
+        data['user'] = user_data
+        data['refresh'] = str(refresh)
+        data['access'] = str(refresh.access_token)
+        
         return data
+    
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+        
+        # Add custom claims
+        if hasattr(user, 'profile'):
+            token['email'] = user.profile.email
+            token['role'] = user.profile.role
+        
+        return token
