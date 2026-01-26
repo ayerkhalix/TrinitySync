@@ -39,7 +39,7 @@ export const Navbar = () => {
   };
 
   const menuItems = [
-    { href: '/admin', label: 'Dashboard', icon: <Calendar size={18} /> },
+    { href: '/admin', label: 'Dashboard', icon: <Calendar size={18} />, exact: true },
     { href: '/admin/view-schedules', label: 'Schedules', icon: <CalendarDays size={18} /> },
     { href: '/admin/activity-logs', label: 'Activity Logs', icon: <Activity size={18} /> },
     { href: '/admin/settings', label: 'System Settings', icon: <Settings size={18} /> },
@@ -69,6 +69,14 @@ export const Navbar = () => {
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
+
+  // Helper function to determine if a nav item is active
+  const isActive = (href: string, exact: boolean = false) => {
+    if (exact) {
+      return pathname === href;
+    }
+    return pathname.startsWith(href);
+  };
 
   return (
     <>
@@ -122,7 +130,7 @@ export const Navbar = () => {
               {/* Desktop Navigation */}
               <div className="hidden lg:flex items-center space-x-1 ml-4">
                 {menuItems.map((item, index) => {
-                  const isActive = pathname.startsWith(item.href);
+                  const active = isActive(item.href, item.exact);
                   return (
                     <Link key={item.href} href={item.href}>
                       <motion.div
@@ -130,22 +138,22 @@ export const Navbar = () => {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.1 + index * 0.1 }}
                         className={`relative px-4 py-2.5 rounded-lg transition-all duration-300 flex items-center space-x-2.5 ${
-                          isActive 
+                          active 
                             ? `${deptTheme.active} text-foreground shadow-md`
                             : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                         } border ${
-                          isActive 
+                          active 
                             ? 'border-primary/50' 
                             : 'border-transparent'
                         }`}
                       >
                         <div className="flex items-center space-x-2.5">
-                          <div className={`${isActive ? 'text-primary' : 'text-muted-foreground'}`}>
+                          <div className={`${active ? 'text-primary' : 'text-muted-foreground'}`}>
                             {item.icon}
                           </div>
                           <span className="font-semibold text-sm">{item.label}</span>
                         </div>
-                        {isActive && (
+                        {active && (
                           <motion.div
                             layoutId="activeTab"
                             className="absolute -bottom-1.5 left-1/2 transform -translate-x-1/2 w-8 h-0.5 rounded-full bg-primary"
@@ -160,7 +168,6 @@ export const Navbar = () => {
 
             {/* Right Side Actions */}
             <div className="flex items-center space-x-2">
-
               {/* Theme Toggle */}
               <motion.button
                 whileHover={{ scale: 1.05 }}
@@ -176,7 +183,7 @@ export const Navbar = () => {
                   }, 0);
                 }}
                 data-theme-toggle
-                className="flex items-center justify-center h-10 w-10 rounded-xl bg-accent text-muted-foreground hover:text-foreground hover:bg-accent/80 border border-border transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20"
+                className="flex items-center justify-center h-10 w-10 rounded-xl bg-accent text-muted-foreground hover:text-foreground hover:bg-accent/80 border border-border transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
               >
                 <AnimatePresence mode="wait">
                   <motion.div
@@ -196,13 +203,12 @@ export const Navbar = () => {
                 </AnimatePresence>
               </motion.button>
 
-
-                      {/* Notification */}
+              {/* Notification */}
               <motion.div className="relative">
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  className="flex items-center justify-center h-10 w-10 rounded-xl bg-accent text-muted-foreground hover:text-foreground hover:bg-accent/80 border border-border transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="flex items-center justify-center h-10 w-10 rounded-xl bg-accent text-muted-foreground hover:text-foreground hover:bg-accent/80 border border-border transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
                 >
                   <Bell className="h-5 w-5" />
                   {showNotification && (
@@ -224,7 +230,7 @@ export const Navbar = () => {
                 >
                   <motion.button
                     onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
-                    className="user-menu-button flex items-center space-x-3 rounded-xl px-3 py-1.5 hover:bg-accent border border-border transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    className="user-menu-button flex items-center space-x-3 rounded-xl px-3 py-1.5 hover:bg-accent border border-border transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
                   >
                     <motion.div
                       whileHover={{ rotate: 360 }}
@@ -333,7 +339,7 @@ export const Navbar = () => {
                                 logout();
                                 closeDropdowns();
                               }}
-                              className="flex w-full items-center justify-center space-x-2 px-4 py-2.5 text-sm font-medium transition-colors rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive focus:outline-none focus:ring-2 focus:ring-destructive/20"
+                              className="flex w-full items-center justify-center space-x-2 px-4 py-2.5 text-sm font-medium transition-colors rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive focus:outline-none focus:ring-2 focus:ring-destructive/20 cursor-pointer"
                             >
                               <LogOut size={16} />
                               <span>Sign Out</span>
@@ -350,7 +356,7 @@ export const Navbar = () => {
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                   >
-                    <Button className="bg-primary text-primary-foreground hover:bg-primary/90 border-2 border-primary font-semibold shadow-md focus:outline-none focus:ring-2 focus:ring-primary/20">
+                    <Button className="bg-primary text-primary-foreground hover:bg-primary/90 border-2 border-primary font-semibold shadow-md focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer">
                       Sign In
                     </Button>
                   </motion.div>
@@ -362,7 +368,7 @@ export const Navbar = () => {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className="lg:hidden p-2 rounded-xl hover:bg-accent text-foreground border border-border focus:outline-none focus:ring-2 focus:ring-primary/20 ml-2"
+                className="lg:hidden p-2 rounded-xl hover:bg-accent text-foreground border border-border focus:outline-none focus:ring-2 focus:ring-primary/20 ml-2 cursor-pointer"
               >
                 {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
               </motion.button>
@@ -381,7 +387,7 @@ export const Navbar = () => {
             >
               <div className="px-4 py-3 space-y-1">
                 {menuItems.map((item, index) => {
-                  const isActive = pathname.startsWith(item.href);
+                  const active = isActive(item.href, item.exact);
                   return (
                     <motion.div
                       key={item.href}
@@ -392,17 +398,17 @@ export const Navbar = () => {
                       <Link
                         href={item.href}
                         className={`flex items-center space-x-3 p-3.5 rounded-xl transition-all ${
-                          isActive
+                          active
                             ? 'bg-accent text-foreground shadow-md'
                             : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-                        } border ${isActive ? 'border-primary/50' : 'border-transparent'}`}
+                        } border ${active ? 'border-primary/50' : 'border-transparent'} cursor-pointer`}
                         onClick={closeDropdowns}
                       >
-                        <div className={`${isActive ? 'text-primary' : 'text-muted-foreground'}`}>
+                        <div className={`${active ? 'text-primary' : 'text-muted-foreground'}`}>
                           {item.icon}
                         </div>
                         <span className="font-semibold">{item.label}</span>
-                        {isActive && (
+                        {active && (
                           <div className="ml-auto h-2 w-2 rounded-full bg-primary animate-pulse" />
                         )}
                       </Link>
