@@ -10,7 +10,8 @@ import {
   X, RefreshCw, CheckCircle, AlertCircle,
   CalendarDays, GraduationCap, Layers,
   ChevronRight, Grid, Table, List,
-  ArrowLeft, CheckSquare, Square
+  ArrowLeft, CheckSquare, Square,
+  Maximize2
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -371,24 +372,20 @@ export default function ViewSchedulesPage() {
     if (selectedCourse) {
       // Print individual course schedule
       window.print();
-    } else {
-      // Print course list
-      window.print();
     }
   };
 
   const handleExport = () => {
-    const data = selectedCourse || filteredCourses;
-    const dataStr = JSON.stringify(data, null, 2);
-    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-    const exportFileDefaultName = selectedCourse 
-      ? `${selectedCourse.program}_${selectedCourse.section}_schedule.json`
-      : 'courses_export.json';
-    
-    const linkElement = document.createElement('a');
-    linkElement.setAttribute('href', dataUri);
-    linkElement.setAttribute('download', exportFileDefaultName);
-    linkElement.click();
+    if (selectedCourse) {
+      const dataStr = JSON.stringify(selectedCourse, null, 2);
+      const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+      const exportFileDefaultName = `${selectedCourse.program}_${selectedCourse.section}_schedule.json`;
+      
+      const linkElement = document.createElement('a');
+      linkElement.setAttribute('href', dataUri);
+      linkElement.setAttribute('download', exportFileDefaultName);
+      linkElement.click();
+    }
   };
 
   const handleResetFilters = () => {
@@ -504,7 +501,33 @@ export default function ViewSchedulesPage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {!selectedCourse && (
+          {selectedCourse ? (
+            <>
+              <Button 
+                onClick={() => {/* Preview functionality */}}
+                variant="outline"
+                className="border-border text-foreground hover:bg-accent/50"
+              >
+                <Maximize2 className="h-4 w-4 mr-2" />
+                Preview
+              </Button>
+              <Button 
+                onClick={handleExport}
+                variant="outline"
+                className="border-border text-foreground hover:bg-accent/50"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Export
+              </Button>
+              <Button 
+                onClick={handlePrint}
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                <Printer className="h-4 w-4 mr-2" />
+                Print
+              </Button>
+            </>
+          ) : (
             <div className="flex items-center border border-border rounded-lg p-1">
               <Button
                 onClick={() => setViewMode('grid')}
@@ -530,21 +553,6 @@ export default function ViewSchedulesPage() {
               </Button>
             </div>
           )}
-          <Button 
-            onClick={handleExport}
-            variant="outline"
-            className="border-border text-foreground hover:bg-accent/50"
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
-          <Button 
-            onClick={handlePrint}
-            className="bg-primary text-primary-foreground hover:bg-primary/90"
-          >
-            <Printer className="h-4 w-4 mr-2" />
-            Print
-          </Button>
         </div>
       </motion.div>
 
@@ -891,9 +899,9 @@ export default function ViewSchedulesPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    className="text-muted-foreground hover:text-foreground hover:bg-accent/50"
+                    className="border-border text-foreground hover:bg-accent/50"
                     onClick={() => router.push('/admin/create-schedule')}
                   >
                     <Calendar className="h-4 w-4 mr-2" />
@@ -1000,24 +1008,24 @@ export default function ViewSchedulesPage() {
                 // Table View
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-border">
-                    <thead className="bg-accent/30">
+                    <thead className="bg-gray-100 dark:bg-gray-800/50">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider">
                           Program & Section
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider">
                           Year & Semester
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider">
                           Academic Year
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider">
                           Subjects
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider">
                           Status
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider">
                           Actions
                         </th>
                       </tr>
@@ -1086,9 +1094,9 @@ export default function ViewSchedulesPage() {
 
               {/* Table Footer */}
               {filteredCourses.length > 0 && (
-                <div className="px-6 py-4 border-t border-border bg-accent/10">
+                <div className="px-6 py-4 border-t border-border bg-gray-50 dark:bg-gray-800/30">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="text-sm text-muted-foreground">
+                    <div className="text-sm text-gray-600 dark:text-gray-400">
                       Showing {filteredCourses.length} of {courses.length} courses
                     </div>
                   </div>
@@ -1175,11 +1183,11 @@ export default function ViewSchedulesPage() {
                 <table className="min-w-full border-collapse border border-border">
                   <thead>
                     <tr>
-                      <th className="border border-border p-3 bg-accent/30 text-left text-sm font-medium text-muted-foreground">
+                      <th className="border border-border p-3 bg-gray-100 dark:bg-gray-800/50 text-left text-sm font-medium text-gray-700 dark:text-gray-300">
                         Time
                       </th>
                       {days.map((day) => (
-                        <th key={day} className="border border-border p-3 bg-accent/30 text-center text-sm font-medium text-muted-foreground">
+                        <th key={day} className="border border-border p-3 bg-gray-100 dark:bg-gray-800/50 text-center text-sm font-medium text-gray-700 dark:text-gray-300">
                           {day}
                         </th>
                       ))}
@@ -1188,7 +1196,7 @@ export default function ViewSchedulesPage() {
                   <tbody>
                     {timeSlots.map((timeSlot) => (
                       <tr key={timeSlot}>
-                        <td className="border border-border p-3 bg-accent/10 text-sm font-medium text-foreground whitespace-nowrap">
+                        <td className="border border-border p-3 bg-gray-50 dark:bg-gray-800/30 text-sm font-medium text-foreground whitespace-nowrap">
                           {timeSlot}
                         </td>
                         {days.map((day) => (
