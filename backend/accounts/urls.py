@@ -1,10 +1,16 @@
-# accounts/urls.py
-from django.urls import path
-from .views import RegisterView, LoginView, LogoutView, UserProfileView
+"""
+URL configuration for accounts app.
+"""
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from . import views
+
+router = DefaultRouter()
+router.register(r'profiles', views.UserProfileViewSet, basename='profile')
+router.register(r'students', views.StudentProfileViewSet, basename='student')
+router.register(r'staff', views.StaffProfileViewSet, basename='staff')
 
 urlpatterns = [
-    path('register/', RegisterView.as_view(), name='register'),
-    path('login/', LoginView.as_view(), name='login'),
-    path('logout/', LogoutView.as_view(), name='logout'),
-    path('profile/', UserProfileView.as_view(), name='profile'),
+    path('', include(router.urls)),
+    path('me/', views.CurrentUserView.as_view(), name='current-user'),
 ]
