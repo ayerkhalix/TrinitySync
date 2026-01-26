@@ -8,9 +8,12 @@ urlpatterns = [
     
     # API endpoints
     path('api/auth/', include('accounts.urls')),
-    path('api/core/', include('core.urls')),
-    path('api/schedules/', include('schedules.urls')),
+    path('api/scheduling/', include('scheduling.urls')),
     path('api/activity-logs/', include('activity_logs.urls')),
+    
+    path('api/colleges/', include('colleges.urls')),
+    path('api/courses/', include('courses.urls')),
+    
     
     # JWT token refresh
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),

@@ -42,17 +42,18 @@ INSTALLED_APPS = [
     'corsheaders',
     
     # Local apps
-    'scheduler',
     
     'accounts',
-    'core',
-    'schedules',
     'activity_logs',
+    'colleges',
+    'scheduling',
+    'courses',
+    
+    
     
     'django_filters',
 ]
 
-AUTH_USER_MODEL = 'accounts.User'
 
 
 MIDDLEWARE = [
