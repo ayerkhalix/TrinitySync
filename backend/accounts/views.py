@@ -16,7 +16,7 @@ from .serializers import (
     StaffProfileSerializer, UserRegistrationSerializer,
     ChangePasswordSerializer
 )
-from .permissions import IsCollegeAdmin, IsSuperAdmin, IsProfileOwner
+from .permissions import IsCollegeAdmin, IsSuperAdmin, IsProfileOwner   
 from activity_logs.models import ActivityLog
 
 User = get_user_model()
