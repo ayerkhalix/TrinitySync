@@ -68,10 +68,35 @@ class CanViewScheduleGroup(permissions.BasePermission):
         
         if user_profile.role == 'COLLEGE_ADMIN':
             if hasattr(user_profile, 'staff_profile'):
-                return obj.schedule_group.college == user_profile.staff_profile.college
+                return obj.college == user_profile.staff_profile.college
         
         if user_profile.role == 'INSTRUCTOR':
-            # Instructors can view items they're assigned to
-            return obj.instructor and obj.instructor.user == user_profile
+            # Instructors can view schedule groups from their college
+            if hasattr(user_profile, 'staff_profile'):
+                return obj.college == user_profile.staff_profile.college
+        
+        if user_profile.role == 'STUDENT':
+            # Students can view schedule groups from their program/year
+            if hasattr(user_profile, 'student_profile'):
+                student = user_profile.student_profile
+                return (obj.program == student.program and 
+                        obj.year_level == student.year_level)
         
         return False
+
+
+class CanCreateSchedule(permissions.BasePermission):
+    """
+    Permission to create schedules.
+    """
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        
+        if not hasattr(request.user, 'profile'):
+            return False
+        
+        user_profile = request.user.profile
+        
+        # Only college admins and super admins can create schedules
+        return user_profile.role in ['COLLEGE_ADMIN', 'SUPER_ADMIN']
