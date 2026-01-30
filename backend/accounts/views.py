@@ -1,3 +1,4 @@
+# accounts/views.py
 """
 API views for the accounts app.
 """
@@ -8,15 +9,14 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.views import APIView
 from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
-from django.db.models import Q
 
 from .models import UserProfile, StudentProfile, StaffProfile, UserRole
 from .serializers import (
-    UserProfileSerializer, StudentProfileSerializer, 
+    UserProfileSerializer, UserProfileDetailSerializer, StudentProfileSerializer, 
     StaffProfileSerializer, UserRegistrationSerializer,
-    ChangePasswordSerializer
+    ChangePasswordSerializer, EmailTokenObtainPairSerializer
 )
-from .permissions import IsCollegeAdmin, IsSuperAdmin, IsProfileOwner   
+from .permissions import IsCollegeAdmin, IsSuperAdmin, IsProfileOwner, IsStudent, IsInstructor
 from activity_logs.models import ActivityLog
 
 User = get_user_model()
@@ -26,12 +26,18 @@ class UserProfileViewSet(viewsets.ModelViewSet):
     """
     API endpoint for managing user profiles.
     """
-    queryset = UserProfile.objects.all().order_by('email')
+    queryset = UserProfile.objects.select_related('user').all().order_by('email')
     serializer_class = UserProfileSerializer
     permission_classes = [IsAuthenticated, IsSuperAdmin]
     search_fields = ['email', 'phone_number']
     ordering_fields = ['email', 'role', 'created_at']
     ordering = ['email']
+    
+    def get_serializer_class(self):
+        """Use detail serializer for super admins to see metadata."""
+        if self.action == 'retrieve' and self.request.user.profile.role == 'SUPER_ADMIN':
+            return UserProfileDetailSerializer
+        return UserProfileSerializer
     
     def get_permissions(self):
         """
@@ -41,6 +47,8 @@ class UserProfileViewSet(viewsets.ModelViewSet):
             permission_classes = [IsAuthenticated, IsProfileOwner | IsSuperAdmin]
         elif self.action == 'destroy':
             permission_classes = [IsAuthenticated, IsSuperAdmin]
+        elif self.action in ['me', 'update_me']:
+            permission_classes = [IsAuthenticated]
         else:
             permission_classes = self.permission_classes
         return [permission() for permission in permission_classes]
@@ -59,7 +67,7 @@ class UserProfileViewSet(viewsets.ModelViewSet):
         
         # College admins can see profiles from their college
         if user_profile.role == 'COLLEGE_ADMIN':
-            if hasattr(user_profile, 'staff_profile'):
+            if hasattr(user_profile, 'staff_profile') and user_profile.staff_profile:
                 college = user_profile.staff_profile.college
                 if college:
                     # Get student profiles in the college
@@ -87,7 +95,7 @@ class UserProfileViewSet(viewsets.ModelViewSet):
         
         return queryset.none()
     
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=['get'], url_path='me')
     def me(self, request):
         """
         Get the current user's profile.
@@ -95,7 +103,7 @@ class UserProfileViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(request.user.profile)
         return Response(serializer.data)
     
-    @action(detail=False, methods=['put', 'patch'])
+    @action(detail=False, methods=['put', 'patch'], url_path='me/update')
     def update_me(self, request):
         """
         Update the current user's profile.
@@ -139,6 +147,14 @@ class UserProfileViewSet(viewsets.ModelViewSet):
         user_profile.role = new_role
         user_profile.save()
         
+        # Update staff profile flags if applicable
+        if hasattr(user_profile, 'staff_profile') and user_profile.staff_profile:
+            staff_profile = user_profile.staff_profile
+            staff_profile.is_college_admin = (new_role == 'COLLEGE_ADMIN')
+            staff_profile.is_super_admin = (new_role == 'SUPER_ADMIN')
+            staff_profile.save()
+        
+        # Log the action - ensure ActivityLog.user is not None
         ActivityLog.objects.create(
             user=request.user.profile,
             action_type=ActivityLog.ActionType.UPDATE,
@@ -154,9 +170,9 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
     """
     API endpoint for managing student profiles.
     """
-    queryset = StudentProfile.objects.all().select_related(
-        'user', 'college', 'program'
-    ).order_by('student_id')
+    queryset = StudentProfile.objects.select_related(
+        'user', 'user__user', 'college', 'program'
+    ).all().order_by('student_id')
     serializer_class = StudentProfileSerializer
     permission_classes = [IsAuthenticated, IsCollegeAdmin | IsSuperAdmin]
     search_fields = ['student_id', 'user__email', 'section']
@@ -189,14 +205,14 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
         
         # College admins can only see student profiles from their college
         if user_profile.role == 'COLLEGE_ADMIN':
-            if hasattr(user_profile, 'staff_profile'):
+            if hasattr(user_profile, 'staff_profile') and user_profile.staff_profile:
                 college = user_profile.staff_profile.college
                 if college:
                     return queryset.filter(college=college)
         
         # Instructors can only see student profiles from their college
         if user_profile.role == 'INSTRUCTOR':
-            if hasattr(user_profile, 'staff_profile'):
+            if hasattr(user_profile, 'staff_profile') and user_profile.staff_profile:
                 college = user_profile.staff_profile.college
                 if college:
                     return queryset.filter(college=college)
@@ -212,9 +228,9 @@ class StaffProfileViewSet(viewsets.ModelViewSet):
     """
     API endpoint for managing staff profiles.
     """
-    queryset = StaffProfile.objects.all().select_related(
-        'user', 'college'
-    ).order_by('employee_id')
+    queryset = StaffProfile.objects.select_related(
+        'user', 'user__user', 'college'
+    ).all().order_by('employee_id')
     serializer_class = StaffProfileSerializer
     permission_classes = [IsAuthenticated, IsCollegeAdmin | IsSuperAdmin]
     search_fields = ['employee_id', 'user__email', 'position', 'department']
@@ -247,7 +263,7 @@ class StaffProfileViewSet(viewsets.ModelViewSet):
         
         # College admins can only see staff profiles from their college
         if user_profile.role == 'COLLEGE_ADMIN':
-            if hasattr(user_profile, 'staff_profile'):
+            if hasattr(user_profile, 'staff_profile') and user_profile.staff_profile:
                 college = user_profile.staff_profile.college
                 if college:
                     return queryset.filter(college=college)
@@ -272,15 +288,16 @@ class CurrentUserView(APIView):
         user_profile = request.user.profile
         
         # Get base profile data
-        profile_data = UserProfileSerializer(user_profile).data
+        serializer = UserProfileSerializer(user_profile)
+        profile_data = serializer.data
         
         # Add student profile data if exists
-        if hasattr(user_profile, 'student_profile'):
+        if hasattr(user_profile, 'student_profile') and user_profile.student_profile:
             student_data = StudentProfileSerializer(user_profile.student_profile).data
             profile_data['student_profile'] = student_data
         
         # Add staff profile data if exists
-        if hasattr(user_profile, 'staff_profile'):
+        if hasattr(user_profile, 'staff_profile') and user_profile.staff_profile:
             staff_data = StaffProfileSerializer(user_profile.staff_profile).data
             profile_data['staff_profile'] = staff_data
         
@@ -298,8 +315,9 @@ def register_user(request):
     if serializer.is_valid():
         user_profile = serializer.save()
         
+        # Log the action - ensure we have a user for the log
         ActivityLog.objects.create(
-            user=None,  # System action
+            user=user_profile,  # Use the created user profile
             action_type=ActivityLog.ActionType.CREATE,
             description=f'User registered: {user_profile.email}',
             affected_models=['UserProfile'],
@@ -352,3 +370,14 @@ class ChangePasswordView(APIView):
             return Response({'message': 'Password updated successfully.'})
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# CORRECT JWT VIEW - Use SimpleJWT's built-in view
+from rest_framework_simplejwt.views import TokenObtainPairView
+
+class EmailTokenObtainPairView(TokenObtainPairView):
+    """
+    Custom view for email-based JWT token obtain.
+    Using SimpleJWT's built-in view ensures proper token generation.
+    """
+    serializer_class = EmailTokenObtainPairSerializer

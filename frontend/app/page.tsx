@@ -148,7 +148,7 @@ export default function HomePage() {
               </motion.div>
               <div>
                 <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
-                  HTU Portal
+                  TrinityFlow
                 </h1>
                 <p className="text-sm text-gray-500">Holy Trinity University</p>
               </div>
@@ -162,7 +162,7 @@ export default function HomePage() {
             >
               <div className="flex items-center space-x-2 text-gray-600">
                 <Calendar className="h-4 w-4" />
-                <span className="text-sm">Academic Year 2024-2025</span>
+                <span className="text-sm">Academic Year 2025-2026</span>
               </div>
               <Link
                 href="/login"
@@ -188,7 +188,7 @@ export default function HomePage() {
               <div className="inline-flex items-center space-x-2 mb-6">
                 <Sparkles className="h-6 w-6 text-amber-500" />
                 <span className="text-sm font-semibold text-amber-600 bg-amber-50 px-3 py-1 rounded-full">
-                  Welcome to HTU Digital Campus
+                  Welcome to TrinityFlow
                 </span>
               </div>
               

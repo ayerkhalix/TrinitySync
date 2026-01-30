@@ -1,5 +1,7 @@
 /* app/globals.css */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
+
 
 /* Define your theme variables FIRST */
 :root {
@@ -24,6 +26,14 @@
   --ring: 142 76% 36%;
   --radius: 0.75rem;
 }
+
+
+html,
+body {
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, sans-serif;
+}
+
 
 /* Dark mode variables - triggered by .dark class on <html> */
 .dark {

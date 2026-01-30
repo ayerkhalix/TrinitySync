@@ -1,3 +1,4 @@
+# accounts/permissions.py
 """
 Custom permissions for the accounts app.
 """
@@ -7,6 +8,7 @@ from rest_framework import permissions
 class IsCollegeAdmin(permissions.BasePermission):
     """
     Permission check for college administrators.
+    Uses both role AND staff_profile.is_college_admin flag for consistency.
     """
     def has_permission(self, request, view):
         if not request.user.is_authenticated:
@@ -22,8 +24,11 @@ class IsCollegeAdmin(permissions.BasePermission):
         if user_profile.role == 'SUPER_ADMIN':
             return True
         
-        # College admins have permission
+        # College admins have permission (role-based)
         if user_profile.role == 'COLLEGE_ADMIN':
+            # Also check staff_profile flag for consistency
+            if hasattr(user_profile, 'staff_profile') and user_profile.staff_profile:
+                return user_profile.staff_profile.is_college_admin
             return True
         
         return False
@@ -40,7 +45,15 @@ class IsSuperAdmin(permissions.BasePermission):
         if not hasattr(request.user, 'profile'):
             return False
         
-        return request.user.profile.role == 'SUPER_ADMIN'
+        user_profile = request.user.profile
+        
+        # Check both role and staff_profile flag
+        if user_profile.role == 'SUPER_ADMIN':
+            if hasattr(user_profile, 'staff_profile') and user_profile.staff_profile:
+                return user_profile.staff_profile.is_super_admin
+            return True
+        
+        return False
 
 
 class IsProfileOwner(permissions.BasePermission):
@@ -121,10 +134,10 @@ class CanViewOwnCollegeData(permissions.BasePermission):
         # Get user's college
         user_college = None
         if user_profile.role == 'COLLEGE_ADMIN' or user_profile.role == 'INSTRUCTOR':
-            if hasattr(user_profile, 'staff_profile'):
+            if hasattr(user_profile, 'staff_profile') and user_profile.staff_profile:
                 user_college = user_profile.staff_profile.college
         elif user_profile.role == 'STUDENT':
-            if hasattr(user_profile, 'student_profile'):
+            if hasattr(user_profile, 'student_profile') and user_profile.student_profile:
                 user_college = user_profile.student_profile.college
         
         if not user_college:
