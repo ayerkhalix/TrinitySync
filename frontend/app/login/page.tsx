@@ -88,7 +88,7 @@ export default function LoginPage() {
               transition={{ delay: 0.1 }}
               className="text-4xl md:text-5xl font-bold text-gray-900 mb-3"
             >
-              Schedule<span className="text-blue-600">Flow</span>
+              Trinity<span className="text-blue-600">Sync</span>
             </motion.h1>
             <motion.p
               initial={{ y: -10, opacity: 0 }}

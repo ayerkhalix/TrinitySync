@@ -8,7 +8,6 @@ from django.contrib.auth.models import User
 
 class UserRole(models.TextChoices):
     STUDENT = 'STUDENT', _('Student')
-    INSTRUCTOR = 'INSTRUCTOR', _('Instructor')
     COLLEGE_ADMIN = 'COLLEGE_ADMIN', _('College Administrator')
     SUPER_ADMIN = 'SUPER_ADMIN', _('Super Administrator')
 

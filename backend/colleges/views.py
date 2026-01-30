@@ -4,7 +4,7 @@ API views for the colleges app.
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny
 from django_filters.rest_framework import DjangoFilterBackend
 
 from .models import College, Program
@@ -17,6 +17,7 @@ class CollegeViewSet(viewsets.ModelViewSet):
     """
     API endpoint for managing colleges.
     """
+    authentication_classes = []
     queryset = College.objects.all()
     serializer_class = CollegeSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -25,49 +26,56 @@ class CollegeViewSet(viewsets.ModelViewSet):
     ordering = ['code']
     
     def get_permissions(self):
-        """
-        Instantiates and returns the list of permissions that this view requires.
-        """
-        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+        # PUBLIC endpoints (registration use)
+        if self.action in ['list', 'retrieve', 'programs']:
+            permission_classes = [AllowAny]
+        # Admin-only actions
+        elif self.action in ['create', 'update', 'partial_update', 'destroy']:
             permission_classes = [IsAuthenticated, IsSuperAdmin]
         else:
             permission_classes = [IsAuthenticated]
+
         return [permission() for permission in permission_classes]
     
     def get_queryset(self):
         """
         Filter colleges based on user role.
+        Public users (registration) can see all colleges.
         """
-        user_profile = self.request.user.profile
-        
         queryset = super().get_queryset()
-        
-        # Super admins can see all colleges
+
+        # 🔥 IMPORTANT: allow public access
+        if not self.request.user.is_authenticated:
+            return queryset.filter(is_active=True)
+
+        # From here on, user IS authenticated
+        user_profile = getattr(self.request.user, 'profile', None)
+
+        if not user_profile:
+            return queryset.filter(is_active=True)
+
         if user_profile.role == 'SUPER_ADMIN':
             return queryset
-        
-        # College admins can only see their own college
+
         if user_profile.role == 'COLLEGE_ADMIN':
-            if hasattr(user_profile, 'staff_profile'):
+            if hasattr(user_profile, 'staff_profile') and user_profile.staff_profile:
                 college = user_profile.staff_profile.college
                 if college:
-                    return queryset.filter(id=college.id)
-        
-        # Instructors can only see their college
+                    return queryset.filter(id=college.id, is_active=True)
+
         if user_profile.role == 'INSTRUCTOR':
-            if hasattr(user_profile, 'staff_profile'):
+            if hasattr(user_profile, 'staff_profile') and user_profile.staff_profile:
                 college = user_profile.staff_profile.college
                 if college:
-                    return queryset.filter(id=college.id)
-        
-        # Students can only see their college
+                    return queryset.filter(id=college.id, is_active=True)
+
         if user_profile.role == 'STUDENT':
-            if hasattr(user_profile, 'student_profile'):
+            if hasattr(user_profile, 'student_profile') and user_profile.student_profile:
                 college = user_profile.student_profile.college
                 if college:
-                    return queryset.filter(id=college.id)
-        
-        return queryset.none()
+                    return queryset.filter(id=college.id, is_active=True)
+
+        return queryset.filter(is_active=True)
     
     def perform_create(self, serializer):
         """
@@ -113,20 +121,28 @@ class CollegeViewSet(viewsets.ModelViewSet):
         
         instance.delete()
     
-    @action(detail=True, methods=['get'])
+    @action(detail=True, methods=['get'], permission_classes=[AllowAny])
     def programs(self, request, pk=None):
         """
         Get all programs for a college.
+        PUBLIC endpoint for registration.
         """
-        college = self.get_object()
-        programs = Program.objects.filter(college=college, is_active=True)
-        page = self.paginate_queryset(programs)
-        if page is not None:
-            serializer = ProgramSerializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-        
-        serializer = ProgramSerializer(programs, many=True)
-        return Response(serializer.data)
+        try:
+            college = College.objects.get(pk=pk, is_active=True)
+            programs = Program.objects.filter(college=college, is_active=True)
+            
+            page = self.paginate_queryset(programs)
+            if page is not None:
+                serializer = ProgramSerializer(page, many=True)
+                return self.get_paginated_response(serializer.data)
+            
+            serializer = ProgramSerializer(programs, many=True)
+            return Response(serializer.data)
+        except College.DoesNotExist:
+            return Response(
+                {"detail": "College not found or inactive."},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
 
 class ProgramViewSet(viewsets.ModelViewSet):
@@ -145,7 +161,10 @@ class ProgramViewSet(viewsets.ModelViewSet):
         """
         Instantiates and returns the list of permissions that this view requires.
         """
-        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+        # PUBLIC endpoints for registration
+        if self.action in ['list', 'retrieve']:
+            permission_classes = [AllowAny]
+        elif self.action in ['create', 'update', 'partial_update', 'destroy']:
             permission_classes = [IsAuthenticated, IsCollegeAdmin | IsSuperAdmin]
         else:
             permission_classes = [IsAuthenticated]
@@ -155,10 +174,18 @@ class ProgramViewSet(viewsets.ModelViewSet):
         """
         Filter programs based on user role and college.
         """
-        user_profile = self.request.user.profile
-        
         queryset = super().get_queryset()
-        
+
+        # 🔥 IMPORTANT: allow public access (for registration)
+        if not self.request.user.is_authenticated:
+            return queryset.filter(is_active=True)
+
+        # From here on, user IS authenticated
+        user_profile = getattr(self.request.user, 'profile', None)
+
+        if not user_profile:
+            return queryset.filter(is_active=True)
+
         # Super admins can see all programs
         if user_profile.role == 'SUPER_ADMIN':
             return queryset
@@ -168,23 +195,24 @@ class ProgramViewSet(viewsets.ModelViewSet):
             if hasattr(user_profile, 'staff_profile'):
                 college = user_profile.staff_profile.college
                 if college:
-                    return queryset.filter(college=college)
+                    return queryset.filter(college=college, is_active=True)
         
         # Instructors can only see programs from their college
         if user_profile.role == 'INSTRUCTOR':
             if hasattr(user_profile, 'staff_profile'):
                 college = user_profile.staff_profile.college
                 if college:
-                    return queryset.filter(college=college)
+                    return queryset.filter(college=college, is_active=True)
         
         # Students can only see programs from their college
         if user_profile.role == 'STUDENT':
             if hasattr(user_profile, 'student_profile'):
                 college = user_profile.student_profile.college
                 if college:
-                    return queryset.filter(college=college)
+                    return queryset.filter(college=college, is_active=True)
         
-        return queryset.none()
+        # Default: return only active programs
+        return queryset.filter(is_active=True)
     
     def perform_create(self, serializer):
         """
@@ -230,29 +258,35 @@ class ProgramViewSet(viewsets.ModelViewSet):
         
         instance.delete()
     
-    @action(detail=True, methods=['get'])
+    @action(detail=True, methods=['get'], permission_classes=[AllowAny])
     def courses(self, request, pk=None):
         """
         Get all courses for a program.
         """
-        program = self.get_object()
-        courses = program.courses.filter(is_active=True)
-        
-        # Optional filtering
-        year_level = request.query_params.get('year_level')
-        semester = request.query_params.get('semester')
-        
-        if year_level:
-            courses = courses.filter(year_level=year_level)
-        
-        if semester:
-            courses = courses.filter(semester=semester)
-        
-        from courses.serializers import CourseSerializer
-        page = self.paginate_queryset(courses)
-        if page is not None:
-            serializer = CourseSerializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-        
-        serializer = CourseSerializer(courses, many=True)
-        return Response(serializer.data)
+        try:
+            program = Program.objects.get(pk=pk, is_active=True)
+            courses = program.courses.filter(is_active=True)
+            
+            # Optional filtering
+            year_level = request.query_params.get('year_level')
+            semester = request.query_params.get('semester')
+            
+            if year_level:
+                courses = courses.filter(year_level=year_level)
+            
+            if semester:
+                courses = courses.filter(semester=semester)
+            
+            from courses.serializers import CourseSerializer
+            page = self.paginate_queryset(courses)
+            if page is not None:
+                serializer = CourseSerializer(page, many=True)
+                return self.get_paginated_response(serializer.data)
+            
+            serializer = CourseSerializer(courses, many=True)
+            return Response(serializer.data)
+        except Program.DoesNotExist:
+            return Response(
+                {"detail": "Program not found or inactive."},
+                status=status.HTTP_404_NOT_FOUND
+            )

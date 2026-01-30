@@ -1,4 +1,4 @@
-# accounts/serializers.py (CONFIRM THIS IS WHAT YOU HAVE)
+# accounts/serializers.py
 """
 Serializers for the accounts app.
 """
@@ -9,6 +9,8 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 
 from .models import UserProfile, StudentProfile, StaffProfile, UserRole
+from colleges.models import College, Program
+
 
 User = get_user_model()
 
@@ -76,14 +78,74 @@ class UserRegistrationSerializer(serializers.Serializer):
     confirm_password = serializers.CharField(write_only=True, required=True)
     first_name = serializers.CharField(max_length=30, required=False, allow_blank=True)
     last_name = serializers.CharField(max_length=30, required=False, allow_blank=True)
+    phone_number = serializers.CharField(required=False, allow_blank=True)
     role = serializers.ChoiceField(choices=UserRole.choices, default=UserRole.STUDENT)
     
+    # Student-specific fields (optional in serializer, required for students)
+    student_id = serializers.CharField(max_length=50, required=False, allow_blank=True)
+    college_id = serializers.PrimaryKeyRelatedField(
+        queryset=College.objects.all(), 
+        required=False, 
+        allow_null=True,
+        source='college'
+    )
+    program_id = serializers.PrimaryKeyRelatedField(
+        queryset=Program.objects.all(), 
+        required=False, 
+        allow_null=True,
+        source='program'
+    )
+    year_level = serializers.ChoiceField(
+        choices=StudentProfile.YearLevel.choices,
+        required=False
+    )
+    admission_year = serializers.IntegerField(min_value=2000, max_value=2100, required=False, allow_null=True)
+    section = serializers.CharField(max_length=10, required=False, allow_blank=True)
+    
+    def validate_email(self, value):
+        """Check if email is already registered."""
+        if User.objects.filter(username=value).exists():
+            raise serializers.ValidationError("Email already registered")
+        return value
+    
+    def validate_role(self, value):
+        """Only allow student registration through this endpoint."""
+        if value != UserRole.STUDENT:
+            raise serializers.ValidationError("Only students can self-register")
+        return value
+    
     def validate(self, data):
-        if data['password'] != data['confirm_password']:
+        """Validate password match and student-specific requirements."""
+        # Check password match
+        if data['password'] != data.get('confirm_password'):
             raise serializers.ValidationError({"confirm_password": "Passwords do not match."})
+        
+        # If role is STUDENT, validate student-specific fields
+        if data.get('role') == UserRole.STUDENT:
+            if not data.get('student_id'):
+                raise serializers.ValidationError({"student_id": "This field is required for students."})
+            if not data.get('college'):
+                raise serializers.ValidationError({"college_id": "This field is required for students."})
+            if not data.get('program'):
+                raise serializers.ValidationError({"program_id": "This field is required for students."})
+            if not data.get('year_level'):
+                raise serializers.ValidationError({"year_level": "This field is required for students."})
+            if not data.get('admission_year'):
+                raise serializers.ValidationError({"admission_year": "This field is required for students."})
+        
         return data
     
     def create(self, validated_data):
+        # Extract student-specific data
+        student_id = validated_data.pop('student_id', '')
+        college = validated_data.pop('college', None)
+        program = validated_data.pop('program', None)
+        phone_number = validated_data.pop('phone_number', '')
+        year_level = validated_data.pop('year_level', '')
+        admission_year = validated_data.pop('admission_year', None)
+        section = validated_data.pop('section', '')
+        validated_data.pop('confirm_password', None)
+        
         # Create Django User
         user = User.objects.create_user(
             username=validated_data['email'],
@@ -98,8 +160,21 @@ class UserRegistrationSerializer(serializers.Serializer):
             user=user,
             email=validated_data['email'],
             role=validated_data['role'],
+            phone_number=phone_number,
             supabase_uid=f"local_{user.id}"
         )
+        
+        # Create StudentProfile if role is STUDENT
+        if validated_data['role'] == UserRole.STUDENT:
+            StudentProfile.objects.create(
+                user=user_profile,
+                student_id=student_id,
+                college=college,
+                program=program,
+                year_level=year_level,
+                admission_year=admission_year,
+                section=section
+            )
         
         return user_profile
     
@@ -227,9 +302,13 @@ class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
         """Add custom claims to JWT token."""
         token = super().get_token(user)
         
-        # Add custom claims
-        if hasattr(user, 'profile'):
-            token['email'] = user.profile.email
-            token['role'] = user.profile.role
+        # Add custom claims - safely handle profile access
+        try:
+            if hasattr(user, 'profile'):
+                token['email'] = user.profile.email
+                token['role'] = user.profile.role
+        except AttributeError:
+            # User doesn't have a profile, which shouldn't happen in normal flow
+            pass
         
         return token
