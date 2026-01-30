@@ -3,6 +3,7 @@ import uuid
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django.contrib.postgres.fields import ArrayField
+from django.contrib.auth.models import User
 
 
 class UserRole(models.TextChoices):
@@ -14,6 +15,7 @@ class UserRole(models.TextChoices):
 
 class UserProfile(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     supabase_uid = models.CharField(max_length=255, unique=True, db_index=True)
     email = models.EmailField(unique=True)
     role = models.CharField(max_length=20, choices=UserRole.choices, default=UserRole.STUDENT)
@@ -41,7 +43,7 @@ class StudentProfile(models.Model):
         FOURTH_YEAR = 'fourth_year', _('Fourth Year')
         FIFTH_YEAR = 'fifth_year', _('Fifth Year')
 
-    user = models.OneToOneField("accounts.UserProfile", on_delete=models.CASCADE, related_name='student_profile')
+    user = models.OneToOneField(UserProfile, on_delete=models.CASCADE, related_name='student_profile')
     student_id = models.CharField(max_length=50, unique=True)
     college = models.ForeignKey("colleges.College", on_delete=models.CASCADE)
     program = models.ForeignKey("colleges.Program", on_delete=models.CASCADE)
@@ -60,7 +62,7 @@ class StudentProfile(models.Model):
 
 
 class StaffProfile(models.Model):
-    user = models.OneToOneField("accounts.UserProfile", on_delete=models.CASCADE, related_name='staff_profile')
+    user = models.OneToOneField(UserProfile, on_delete=models.CASCADE, related_name='staff_profile')
     employee_id = models.CharField(max_length=50, unique=True, blank=True, null=True)
     college = models.ForeignKey("colleges.College", on_delete=models.SET_NULL, null=True, blank=True)
     position = models.CharField(max_length=100)
