@@ -1,4 +1,4 @@
-// app/login/login-form.tsx (UPDATED)
+// app/login/login-form.tsx
 'use client';
 
 import { useState } from 'react';
@@ -8,14 +8,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { useAuth } from '@/hooks/use-auth';
 
 interface LoginFormProps {
   role: 'student' | 'admin';
-}
-
-interface LoginResponse {
-  access: string;
-  refresh: string;
 }
 
 export function LoginForm({ role }: LoginFormProps) {
@@ -27,6 +23,7 @@ export function LoginForm({ role }: LoginFormProps) {
   });
   const [error, setError] = useState('');
   const router = useRouter();
+  const { login } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,51 +31,21 @@ export function LoginForm({ role }: LoginFormProps) {
     setError('');
 
     try {
-      // Try with email first (your Django might use username)
-      let loginData = {
+      const result = await login({
         email: formData.email,
         password: formData.password,
-      };
-
-      const response = await fetch('http://localhost:8000/api/accounts/auth/login/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(loginData),
       });
 
-      // Check if response is HTML (error page)
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('text/html')) {
-        // Try with username instead of email
-        loginData = {
-          email: formData.email.split('@')[0], // Use username part
-          password: formData.password,
-        };
+      if (result.success && result.user) {
+        toast.success('Login successful!');
         
-        const retryResponse = await fetch('http://localhost:8000/api/accounts/auth/login/', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(loginData),
-        });
-        
-        if (!retryResponse.ok) {
-          throw new Error('Login failed. Please check your credentials.');
-        }
-        
-        const data: LoginResponse = await retryResponse.json();
-        handleSuccessfulLogin(data);
-      } else if (response.ok) {
-        const data: LoginResponse = await response.json();
-        handleSuccessfulLogin(data);
+        // Redirect based on user role
+        setTimeout(() => {
+          redirectUser(result.user!);
+        }, 500);
       } else {
-        const errorData = await response.json();
-        const errorMessage = errorData.detail || 'Invalid email or password';
-        setError(errorMessage);
-        toast.error(errorMessage);
+        setError(result.error || 'Login failed');
+        toast.error(result.error || 'Login failed');
       }
     } catch (error: any) {
       console.error('Login error:', error);
@@ -90,45 +57,22 @@ export function LoginForm({ role }: LoginFormProps) {
     }
   };
 
-  const handleSuccessfulLogin = async (data: LoginResponse) => {
-    // Store tokens
-    localStorage.setItem('access_token', data.access);
-    localStorage.setItem('refresh_token', data.refresh);
+  const redirectUser = (user: any) => {
+    let redirectPath = '/dashboard';
     
-    // Fetch user data using the token
-    try {
-      const userResponse = await fetch('http://localhost:8000/api/accounts/me/', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${data.access}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (userResponse.ok) {
-        const userData = await userResponse.json();
-        localStorage.setItem('user', JSON.stringify(userData));
-        
-        toast.success('Login successful!');
-        
-        // Redirect based on user role
-        let redirectPath = '/';
-        if (userData.role === 'STUDENT') {
-          redirectPath = '/student';
-        } else if (userData.role === 'SUPER_ADMIN' || userData.role === 'COLLEGE_ADMIN') {
-          redirectPath = '/admin';
-        } else if (userData.role === 'INSTRUCTOR') {
-          redirectPath = '/instructor';
-        }
-        
-        router.push(redirectPath);
-      } else {
-        toast.error('Failed to load user data');
-      }
-    } catch (error) {
-      console.error('Error fetching user data:', error);
-      toast.error('Login successful but failed to load user data');
+    switch (user.role) {
+      case 'STUDENT':
+        redirectPath = '/student';
+        break;
+      case 'COLLEGE_ADMIN':
+      case 'SUPER_ADMIN':
+        redirectPath = '/admin';
+        break;
+      default:
+        redirectPath = '/admin';
     }
+    
+    router.push(redirectPath);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -136,16 +80,19 @@ export function LoginForm({ role }: LoginFormProps) {
       ...formData,
       [e.target.name]: e.target.value,
     });
+    if (error) setError('');
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="text-center mb-8">
         <h2 className="text-3xl font-bold text-gray-900 mb-2">
-          Welcome Back
+          {role === 'student' ? 'Student Login' : 'Admin Login'}
         </h2>
         <p className="text-gray-600">
-          Sign in to access your portal
+          {role === 'student' 
+            ? 'Sign in to access your student portal' 
+            : 'Sign in to access admin dashboard'}
         </p>
       </div>
 
@@ -162,8 +109,10 @@ export function LoginForm({ role }: LoginFormProps) {
           value={formData.email}
           onChange={handleChange}
           required
+          disabled={loading}
           icon={<Mail className="h-4 w-4" />}
-          placeholder="student@htu.edu or student_id"
+          placeholder={role === 'student' ? "student@example.com or student_id" : "admin@example.com"}
+          autoComplete="username"
         />
         
         <div className="relative">
@@ -174,13 +123,16 @@ export function LoginForm({ role }: LoginFormProps) {
             value={formData.password}
             onChange={handleChange}
             required
+            disabled={loading}
             icon={<Lock className="h-4 w-4" />}
             placeholder="Enter your password"
+            autoComplete="current-password"
           />
           <button
             type="button"
             onClick={() => setShowPassword(!showPassword)}
             className="absolute right-3 top-10 text-gray-400 hover:text-gray-600"
+            disabled={loading}
           >
             {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
@@ -193,16 +145,31 @@ export function LoginForm({ role }: LoginFormProps) {
           animate={{ opacity: 1, height: 'auto' }}
           className="p-3 bg-red-50 border border-red-200 rounded-lg"
         >
-          <p className="text-red-600 text-sm">{error}</p>
+          <p className="text-red-600 text-sm font-medium">{error}</p>
+          <p className="text-red-500 text-xs mt-1">
+            Backend running? Try: localhost:8000
+          </p>
         </motion.div>
       )}
 
       <div className="flex items-center justify-between">
         <label className="flex items-center space-x-2">
-          <input type="checkbox" className="rounded border-gray-300" />
+          <input 
+            type="checkbox" 
+            className="rounded border-gray-300" 
+            defaultChecked 
+            disabled={loading}
+          />
           <span className="text-sm text-gray-600">Remember me</span>
         </label>
-        <a href="#" className="text-sm text-blue-600 hover:underline">
+        <a 
+          href="#" 
+          className="text-sm text-blue-600 hover:underline disabled:text-gray-400"
+          onClick={(e) => {
+            e.preventDefault();
+            toast.info('Password reset feature coming soon');
+          }}
+        >
           Forgot password?
         </a>
       </div>
@@ -210,6 +177,7 @@ export function LoginForm({ role }: LoginFormProps) {
       <Button
         type="submit"
         loading={loading}
+        disabled={loading}
         className="w-full !py-3 text-lg group"
       >
         <span className="flex items-center justify-center space-x-2">
@@ -223,17 +191,20 @@ export function LoginForm({ role }: LoginFormProps) {
           <div className="w-full border-t border-gray-300" />
         </div>
         <div className="relative flex justify-center text-sm">
-          <span className="px-4 bg-white text-gray-500">Don't have an account?</span>
+          <span className="px-4 bg-white text-gray-500">
+            {role === 'student' ? "Don't have an account?" : "Need student access?"}
+          </span>
         </div>
       </div>
 
       <Button
         type="button"
         variant="outline"
-        onClick={() => router.push('/register')}
+        onClick={() => router.push(role === 'student' ? '/register' : '/login?role=student')}
         className="w-full !py-3"
+        disabled={loading}
       >
-        Create Student Account
+        {role === 'student' ? 'Create Student Account' : 'Switch to Student Login'}
       </Button>
     </form>
   );

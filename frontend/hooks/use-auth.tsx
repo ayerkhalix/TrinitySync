@@ -10,9 +10,27 @@ export const useAuth = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const currentUser = AuthService.getCurrentUser();
-    setUser(currentUser);
-    setLoading(false);
+    const initAuth = async () => {
+      // First check localStorage
+      const storedUser = AuthService.getCurrentUser();
+      
+      // If token might be expired, try to refresh and fetch fresh user data
+      if (storedUser && AuthService.isTokenExpired()) {
+        const newToken = await AuthService.refreshToken();
+        if (newToken) {
+          const freshUser = await AuthService.fetchCurrentUser();
+          setUser(freshUser);
+        } else {
+          setUser(null);
+        }
+      } else {
+        setUser(storedUser);
+      }
+      
+      setLoading(false);
+    };
+
+    initAuth();
   }, []);
 
   const login = async (data: LoginData) => {
@@ -21,16 +39,25 @@ export const useAuth = () => {
       setUser(user);
       return { success: true, user };
     } catch (error: any) {
-      return { success: false, error: error.response?.data?.message || 'Login failed' };
+      return { 
+        success: false, 
+        error: error.message || 'Login failed. Check credentials and ensure backend is running.' 
+      };
     }
   };
 
   const register = async (data: RegisterData) => {
     try {
       const result = await AuthService.register(data);
-      return { success: true, ...result };
+      if (result.user) {
+        setUser(result.user);
+      }
+      return { success: true, message: result.message, user: result.user };
     } catch (error: any) {
-      return { success: false, error: error.response?.data?.message || 'Registration failed' };
+      return { 
+        success: false, 
+        error: error.message || 'Registration failed' 
+      };
     }
   };
 
@@ -39,12 +66,21 @@ export const useAuth = () => {
     setUser(null);
   };
 
+  const refreshUser = async () => {
+    const freshUser = await AuthService.fetchCurrentUser();
+    if (freshUser) {
+      setUser(freshUser);
+    }
+    return freshUser;
+  };
+
   return {
     user,
     loading,
     login,
     register,
     logout,
+    refreshUser,
     isAuthenticated: !!user,
   };
 };

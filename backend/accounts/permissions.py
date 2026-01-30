@@ -94,18 +94,7 @@ class IsStudent(permissions.BasePermission):
         return request.user.profile.role == 'STUDENT'
 
 
-class IsInstructor(permissions.BasePermission):
-    """
-    Permission check for instructors.
-    """
-    def has_permission(self, request, view):
-        if not request.user.is_authenticated:
-            return False
-        
-        if not hasattr(request.user, 'profile'):
-            return False
-        
-        return request.user.profile.role == 'INSTRUCTOR'
+
 
 
 class CanViewOwnCollegeData(permissions.BasePermission):
@@ -119,7 +108,7 @@ class CanViewOwnCollegeData(permissions.BasePermission):
         if not hasattr(request.user, 'profile'):
             return False
         
-        return request.user.profile.role in ['COLLEGE_ADMIN', 'INSTRUCTOR', 'STUDENT']
+        return request.user.profile.role in ['COLLEGE_ADMIN', 'STUDENT']
     
     def has_object_permission(self, request, view, obj):
         if not request.user.is_authenticated:
@@ -133,7 +122,7 @@ class CanViewOwnCollegeData(permissions.BasePermission):
         
         # Get user's college
         user_college = None
-        if user_profile.role == 'COLLEGE_ADMIN' or user_profile.role == 'INSTRUCTOR':
+        if user_profile.role == 'COLLEGE_ADMIN':
             if hasattr(user_profile, 'staff_profile') and user_profile.staff_profile:
                 user_college = user_profile.staff_profile.college
         elif user_profile.role == 'STUDENT':

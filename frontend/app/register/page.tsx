@@ -38,14 +38,16 @@ const YEAR_LEVELS = [
 ];
 
 interface College {
-  id: number;
+  id: string;
+  code: string;
   name: string;
 }
 
 interface Program {
-  id: number;
+  id: string;
   name: string;
-  college: number;
+  college: string;
+  code: string;
 }
 
 export default function RegisterPage() {
@@ -58,19 +60,15 @@ export default function RegisterPage() {
   const [colleges, setColleges] = useState<College[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+  const [filteredPrograms, setFilteredPrograms] = useState<Program[]>([]);
 
   const [formData, setFormData] = useState({
-    // Account Information
     email: '',
     password: '',
-    confirmPassword: '',
-    
-    // Personal Information
+    confirm_password: '',
     first_name: '',
     last_name: '',
     phone_number: '',
-    
-    // Student Information
     student_id: '',
     admission_year: new Date().getFullYear(),
     year_level: 'first_year',
@@ -80,42 +78,98 @@ export default function RegisterPage() {
     role: 'STUDENT' as const,
   });
 
+  // Fetch colleges (RUNS ONCE)
   useEffect(() => {
-    // Mock API calls for colleges and programs
-    // In production, replace with actual API calls
-    const fetchCollegesAndPrograms = async () => {
+    const fetchColleges = async () => {
       try {
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 500));
+        setLoadingData(true);
+        const res = await fetch('http://localhost:8000/api/colleges/colleges/');
         
-        const mockColleges: College[] = [
-          { id: 1, name: 'College of Engineering and Technology' },
-          { id: 2, name: 'College of Business and Accountancy' },
-          { id: 3, name: 'College of Arts and Sciences' },
-        ];
+        if (!res.ok) {
+          throw new Error(`Failed to fetch colleges: ${res.status}`);
+        }
+        
+        const data = await res.json();
+        console.log('Colleges API response:', data);
 
-        const mockPrograms: Program[] = [
-          { id: 1, name: 'BS in Information Technology', college: 1 },
-          { id: 2, name: 'BS in Computer Science', college: 1 },
-          { id: 3, name: 'BS in Civil Engineering', college: 1 },
-          { id: 4, name: 'BS in Accountancy', college: 2 },
-          { id: 5, name: 'BS in Business Administration', college: 2 },
-          { id: 6, name: 'BA in Communication', college: 3 },
-          { id: 7, name: 'BS in Psychology', college: 3 },
-        ];
+        // DRF paginated response safety
+        const collegeList = Array.isArray(data)
+          ? data
+          : Array.isArray(data.results)
+          ? data.results
+          : [];
 
-        setColleges(mockColleges);
-        setPrograms(mockPrograms);
-      } catch (error) {
-        console.error('Error fetching data:', error);
-        toast.error('Failed to load registration data');
+        // Ensure we have valid data - FIXED: Added parentheses for typed parameter
+        const validColleges = collegeList.filter((college: any) => 
+          college && typeof college.id === 'string' && college.name
+        );
+
+        console.log('Valid colleges:', validColleges);
+        setColleges(validColleges);
+      } catch (err) {
+        console.error('Failed to fetch colleges:', err);
+        toast.error('Failed to load colleges');
+        setColleges([]);
       } finally {
         setLoadingData(false);
       }
     };
 
-    fetchCollegesAndPrograms();
+    fetchColleges();
   }, []);
+
+  // Fetch programs when college is selected
+  useEffect(() => {
+    if (!formData.college_id) {
+      setPrograms([]);
+      setFilteredPrograms([]);
+      return;
+    }
+
+    const fetchPrograms = async () => {
+      try {
+        const res = await fetch(
+          `http://localhost:8000/api/colleges/colleges/${formData.college_id}/programs/`
+        );
+        
+        if (!res.ok) {
+          throw new Error(`Failed to fetch programs: ${res.status}`);
+        }
+        
+        const data = await res.json();
+        console.log('Programs API response:', data);
+
+        // DRF paginated response safety
+        const programList = Array.isArray(data)
+          ? data
+          : Array.isArray(data.results)
+          ? data.results
+          : [];
+
+        // Ensure we have valid data - FIXED: Added parentheses for typed parameter
+        const validPrograms = programList.filter((program: any) => 
+          program && typeof program.id === 'string' && program.name
+        );
+
+        console.log('Valid programs:', validPrograms);
+        setPrograms(validPrograms);
+        setFilteredPrograms(validPrograms);
+        
+        // Reset program selection when college changes
+        setFormData(prev => ({
+          ...prev,
+          program_id: ''
+        }));
+      } catch (err) {
+        console.error('Failed to fetch programs:', err);
+        toast.error('Failed to load programs');
+        setPrograms([]);
+        setFilteredPrograms([]);
+      }
+    };
+
+    fetchPrograms();
+  }, [formData.college_id]);
 
   const validateStep1 = () => {
     const newErrors: Record<string, string> = {};
@@ -128,8 +182,8 @@ export default function RegisterPage() {
       newErrors.password = 'Password must be at least 8 characters';
     }
     
-    if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
+    if (formData.password !== formData.confirm_password) {
+      newErrors.confirm_password = 'Passwords do not match';
     }
     
     setErrors(newErrors);
@@ -201,10 +255,10 @@ export default function RegisterPage() {
     setErrors({});
 
     try {
-      // Prepare data for API
       const registrationData = {
         email: formData.email,
         password: formData.password,
+        confirm_password: formData.confirm_password,
         first_name: formData.first_name,
         last_name: formData.last_name,
         phone_number: formData.phone_number || '',
@@ -212,12 +266,13 @@ export default function RegisterPage() {
         admission_year: formData.admission_year,
         year_level: formData.year_level,
         section: formData.section || '',
-        college_id: parseInt(formData.college_id),
-        program_id: parseInt(formData.program_id),
+        college_id: formData.college_id,
+        program_id: formData.program_id,
         role: formData.role,
       };
 
-      // Call your Django register endpoint
+      console.log('Sending registration data:', registrationData);
+
       const response = await fetch('http://localhost:8000/api/accounts/register/', {
         method: 'POST',
         headers: {
@@ -227,16 +282,29 @@ export default function RegisterPage() {
       });
 
       const data = await response.json();
+      console.log('Registration response:', data);
 
       if (response.ok) {
         toast.success('Registration successful! Please login to continue.');
         router.push('/login');
       } else {
-        // Handle validation errors from backend
-        if (data.errors) {
-          setErrors(data.errors);
-        } else if (data.detail) {
-          toast.error(data.detail);
+        if (typeof data === 'object' && data !== null) {
+          const fieldErrors: Record<string, string> = {};
+          Object.keys(data).forEach(key => {
+            if (Array.isArray(data[key])) {
+              fieldErrors[key] = data[key].join(' ');
+            } else if (typeof data[key] === 'string') {
+              fieldErrors[key] = data[key];
+            }
+          });
+          
+          if (Object.keys(fieldErrors).length > 0) {
+            setErrors(fieldErrors);
+          } else if (data.detail) {
+            toast.error(data.detail);
+          }
+        } else if (typeof data === 'string') {
+          toast.error(data);
         } else {
           toast.error('Registration failed. Please try again.');
         }
@@ -252,7 +320,6 @@ export default function RegisterPage() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     
-    // Clear error for this field when user starts typing
     if (errors[name]) {
       setErrors(prev => {
         const newErrors = { ...prev };
@@ -266,10 +333,6 @@ export default function RegisterPage() {
       [name]: value,
     }));
   };
-
-  const filteredPrograms = formData.college_id 
-    ? programs.filter(program => program.college.toString() === formData.college_id)
-    : [];
 
   const steps = [
     { number: 1, title: 'Account', description: 'Create your login credentials' },
@@ -290,9 +353,8 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50">
-      {/* Animated Background Elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {particles.map((p, i) => (
+        {particles.map((p) => (
           <motion.div
             key={p.id}
             className="absolute h-1 w-1 rounded-full bg-indigo-200/50"
@@ -315,7 +377,6 @@ export default function RegisterPage() {
           transition={{ duration: 0.5 }}
           className="w-full max-w-4xl mx-auto"
         >
-          {/* Header */}
           <div className="text-center mb-8">
             <motion.div
               initial={{ y: -20, opacity: 0 }}
@@ -347,7 +408,6 @@ export default function RegisterPage() {
             </motion.p>
           </div>
 
-          {/* Progress Steps */}
           <div className="mb-8">
             <div className="flex justify-between relative">
               <div className="absolute top-5 left-0 right-0 h-1 bg-gray-200 -z-10" />
@@ -452,11 +512,11 @@ export default function RegisterPage() {
                       <Input
                         label="Confirm Password"
                         type={showConfirmPassword ? 'text' : 'password'}
-                        name="confirmPassword"
-                        value={formData.confirmPassword}
+                        name="confirm_password"
+                        value={formData.confirm_password}
                         onChange={handleChange}
                         required
-                        error={errors.confirmPassword}
+                        error={errors.confirm_password}
                         icon={<Lock className="h-4 w-4" />}
                         placeholder="Re-enter your password"
                       />
@@ -571,9 +631,10 @@ export default function RegisterPage() {
                             className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 appearance-none bg-white"
                           >
                             <option value="">Select College</option>
-                            {colleges.map(college => (
+                            {/* FIXED: Added parentheses for typed parameter */}
+                            {colleges.map((college: College) => (
                               <option key={college.id} value={college.id}>
-                                {college.name}
+                                {college.name} ({college.code})
                               </option>
                             ))}
                           </select>
@@ -593,19 +654,25 @@ export default function RegisterPage() {
                             name="program_id"
                             value={formData.program_id}
                             onChange={handleChange}
-                            disabled={!formData.college_id}
+                            disabled={!formData.college_id || filteredPrograms.length === 0}
                             className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 appearance-none bg-white disabled:bg-gray-50 disabled:cursor-not-allowed"
                           >
                             <option value="">Select Program</option>
-                            {filteredPrograms.map(program => (
+                            {/* FIXED: Added parentheses for typed parameter */}
+                            {filteredPrograms.map((program: Program) => (
                               <option key={program.id} value={program.id}>
-                                {program.name}
+                                {program.name} ({program.code})
                               </option>
                             ))}
                           </select>
                         </div>
                         {errors.program_id && (
                           <p className="mt-1 text-sm text-red-600">{errors.program_id}</p>
+                        )}
+                        {!loadingData && formData.college_id && filteredPrograms.length === 0 && (
+                          <p className="mt-1 text-sm text-amber-600">
+                            No programs available for this college
+                          </p>
                         )}
                       </div>
                     </div>
@@ -623,7 +690,7 @@ export default function RegisterPage() {
                             onChange={handleChange}
                             className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 appearance-none bg-white"
                           >
-                            {YEAR_LEVELS.map(level => (
+                            {YEAR_LEVELS.map((level) => (
                               <option key={level.value} value={level.value}>
                                 {level.label}
                               </option>
@@ -658,7 +725,6 @@ export default function RegisterPage() {
                     </div>
                   </div>
 
-                  {/* Terms and Conditions */}
                   <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
                     <div className="flex items-start space-x-3">
                       <AlertCircle className="h-5 w-5 text-blue-500 mt-0.5" />
@@ -672,7 +738,6 @@ export default function RegisterPage() {
               )}
             </AnimatePresence>
 
-            {/* Navigation Buttons */}
             <div className="mt-8 flex justify-between">
               {currentStep > 1 ? (
                 <Button
@@ -717,7 +782,6 @@ export default function RegisterPage() {
               )}
             </div>
 
-            {/* Demo Info */}
             <div className="mt-8 pt-6 border-t border-gray-200">
               <p className="text-sm text-gray-600 text-center">
                 Already have an account?{' '}
@@ -728,7 +792,6 @@ export default function RegisterPage() {
             </div>
           </motion.div>
 
-          {/* Footer */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

@@ -16,7 +16,7 @@ from .serializers import (
     StaffProfileSerializer, UserRegistrationSerializer,
     ChangePasswordSerializer, EmailTokenObtainPairSerializer
 )
-from .permissions import IsCollegeAdmin, IsSuperAdmin, IsProfileOwner, IsStudent, IsInstructor
+from .permissions import IsCollegeAdmin, IsSuperAdmin, IsProfileOwner, IsStudent
 from activity_logs.models import ActivityLog
 
 User = get_user_model()
@@ -85,9 +85,6 @@ class UserProfileViewSet(viewsets.ModelViewSet):
                     
                     return queryset.filter(id__in=user_ids)
         
-        # Instructors can only see their own profile
-        if user_profile.role == 'INSTRUCTOR':
-            return queryset.filter(id=user_profile.id)
         
         # Students can only see their own profile
         if user_profile.role == 'STUDENT':
@@ -210,12 +207,6 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
                 if college:
                     return queryset.filter(college=college)
         
-        # Instructors can only see student profiles from their college
-        if user_profile.role == 'INSTRUCTOR':
-            if hasattr(user_profile, 'staff_profile') and user_profile.staff_profile:
-                college = user_profile.staff_profile.college
-                if college:
-                    return queryset.filter(college=college)
         
         # Students can only see their own profile
         if user_profile.role == 'STUDENT':
@@ -268,10 +259,7 @@ class StaffProfileViewSet(viewsets.ModelViewSet):
                 if college:
                     return queryset.filter(college=college)
         
-        # Staff can only see their own profile
-        if user_profile.role in ['INSTRUCTOR', 'COLLEGE_ADMIN']:
-            return queryset.filter(user=user_profile)
-        
+
         return queryset.none()
 
 
@@ -375,9 +363,11 @@ class ChangePasswordView(APIView):
 # CORRECT JWT VIEW - Use SimpleJWT's built-in view
 from rest_framework_simplejwt.views import TokenObtainPairView
 
+
 class EmailTokenObtainPairView(TokenObtainPairView):
     """
     Custom view for email-based JWT token obtain.
     Using SimpleJWT's built-in view ensures proper token generation.
     """
     serializer_class = EmailTokenObtainPairSerializer
+    permission_classes = [AllowAny]
