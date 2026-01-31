@@ -18,7 +18,6 @@ class CollegeViewSet(viewsets.ModelViewSet):
     API endpoint for managing colleges.
     """
     authentication_classes = []
-    queryset = College.objects.all()
     serializer_class = CollegeSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['code', 'name', 'description']
@@ -42,40 +41,41 @@ class CollegeViewSet(viewsets.ModelViewSet):
         Filter colleges based on user role.
         Public users (registration) can see all colleges.
         """
-        queryset = super().get_queryset()
+        # Start fresh - NO class-level queryset
+        qs = College.objects.all()
 
         # 🔥 IMPORTANT: allow public access
         if not self.request.user.is_authenticated:
-            return queryset.filter(is_active=True)
+            return qs.filter(is_active=True)
 
         # From here on, user IS authenticated
         user_profile = getattr(self.request.user, 'profile', None)
 
         if not user_profile:
-            return queryset.filter(is_active=True)
+            return qs.filter(is_active=True)
 
         if user_profile.role == 'SUPER_ADMIN':
-            return queryset
+            return qs
 
         if user_profile.role == 'COLLEGE_ADMIN':
             if hasattr(user_profile, 'staff_profile') and user_profile.staff_profile:
                 college = user_profile.staff_profile.college
                 if college:
-                    return queryset.filter(id=college.id, is_active=True)
+                    return qs.filter(id=college.id, is_active=True)
 
         if user_profile.role == 'INSTRUCTOR':
             if hasattr(user_profile, 'staff_profile') and user_profile.staff_profile:
                 college = user_profile.staff_profile.college
                 if college:
-                    return queryset.filter(id=college.id, is_active=True)
+                    return qs.filter(id=college.id, is_active=True)
 
         if user_profile.role == 'STUDENT':
             if hasattr(user_profile, 'student_profile') and user_profile.student_profile:
                 college = user_profile.student_profile.college
                 if college:
-                    return queryset.filter(id=college.id, is_active=True)
+                    return qs.filter(id=college.id, is_active=True)
 
-        return queryset.filter(is_active=True)
+        return qs.filter(is_active=True)
     
     def perform_create(self, serializer):
         """
@@ -149,10 +149,11 @@ class ProgramViewSet(viewsets.ModelViewSet):
     """
     API endpoint for managing programs.
     """
-    queryset = Program.objects.all().select_related('college')
+    # 🔴 CRITICAL: NO class-level queryset here
     serializer_class = ProgramSerializer
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['college', 'degree_type', 'is_active']
+    
+    # ✅ Simple filter backends ONLY (NO DjangoFilterBackend)
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['code', 'name', 'description']
     ordering_fields = ['code', 'name', 'college__code']
     ordering = ['college__code', 'code']
@@ -173,46 +174,48 @@ class ProgramViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """
         Filter programs based on user role and college.
+        LAZY queryset - NO class-level queryset!
         """
-        queryset = super().get_queryset()
-
+        # ✅ Start fresh - this is the FIX
+        qs = Program.objects.select_related("college")
+        
         # 🔥 IMPORTANT: allow public access (for registration)
         if not self.request.user.is_authenticated:
-            return queryset.filter(is_active=True)
+            return qs.filter(is_active=True)
 
         # From here on, user IS authenticated
         user_profile = getattr(self.request.user, 'profile', None)
 
         if not user_profile:
-            return queryset.filter(is_active=True)
+            return qs.filter(is_active=True)
 
         # Super admins can see all programs
         if user_profile.role == 'SUPER_ADMIN':
-            return queryset
+            return qs
         
         # College admins can only see programs from their college
         if user_profile.role == 'COLLEGE_ADMIN':
             if hasattr(user_profile, 'staff_profile'):
                 college = user_profile.staff_profile.college
                 if college:
-                    return queryset.filter(college=college, is_active=True)
+                    return qs.filter(college=college, is_active=True)
         
         # Instructors can only see programs from their college
         if user_profile.role == 'INSTRUCTOR':
             if hasattr(user_profile, 'staff_profile'):
                 college = user_profile.staff_profile.college
                 if college:
-                    return queryset.filter(college=college, is_active=True)
+                    return qs.filter(college=college, is_active=True)
         
         # Students can only see programs from their college
         if user_profile.role == 'STUDENT':
             if hasattr(user_profile, 'student_profile'):
                 college = user_profile.student_profile.college
                 if college:
-                    return queryset.filter(college=college, is_active=True)
+                    return qs.filter(college=college, is_active=True)
         
         # Default: return only active programs
-        return queryset.filter(is_active=True)
+        return qs.filter(is_active=True)
     
     def perform_create(self, serializer):
         """
