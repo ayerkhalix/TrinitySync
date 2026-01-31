@@ -12,9 +12,11 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useRouter } from 'next/navigation';
+import { apiFetch, fetchPrograms, fetchCourses, createSchedules } from '@/lib/api';
 
 interface ScheduleRow {
   id: number;
+  courseId: string;
   courseCode: string;
   courseTitle: string;
   days: string;
@@ -22,33 +24,57 @@ interface ScheduleRow {
   endTime: string;
   instructor: string;
   room: string;
-  section: string;
   program: string;
   yearLevel: string;
   semester: string;
 }
 
 interface Course {
-  id: number;
-  code: string;
-  name: string;
-  description: string;
-  units: number;
-  program: string;
+  id: string;
+  course_code: string;
+  course_title: string;
   year_level: string;
   semester: string;
+  units: number;
 }
+
+interface Program {
+  id: string;
+  name: string;
+  code: string;
+}
+
+const semesterOptions = [
+  { value: 'first_sem', label: 'First Semester' },
+  { value: 'second_sem', label: 'Second Semester' },
+  { value: 'third_sem', label: 'Third Semester' },
+  { value: 'summer', label: 'Summer Term' },
+  { value: 'special', label: 'Special Term' },
+] as const;
+
+const yearLevelOptions = [
+  { value: 'first_year', label: 'First Year' },
+  { value: 'second_year', label: 'Second Year' },
+  { value: 'third_year', label: 'Third Year' },
+  { value: 'fourth_year', label: 'Fourth Year' },
+];
 
 export default function CreateSchedulePage() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [programs, setPrograms] = useState<Program[]>([]);
+  const [selectedProgram, setSelectedProgram] = useState<string>('');
+  const [selectedYearLevel, setSelectedYearLevel] = useState<string>('');
+  const [selectedSemester, setSelectedSemester] = useState<string>('');
   const [courseOptions, setCourseOptions] = useState<Course[]>([]);
   const [instructorOptions, setInstructorOptions] = useState<string[]>([]);
+  const [isLoadingCourses, setIsLoadingCourses] = useState(false);
   
   const [scheduleRows, setScheduleRows] = useState<ScheduleRow[]>([
     {
       id: 1,
+      courseId: '',
       courseCode: '',
       courseTitle: '',
       days: '',
@@ -56,10 +82,9 @@ export default function CreateSchedulePage() {
       endTime: '',
       instructor: '',
       room: '',
-      section: '',
-      program: 'BSIT',
-      yearLevel: 'second_year',
-      semester: 'second_sem',
+      program: '',
+      yearLevel: '',
+      semester: '',
     }
   ]);
 
@@ -91,17 +116,11 @@ export default function CreateSchedulePage() {
     return { display: timeString, value: militaryTime };
   });
 
-  // Mock data for demonstration
+  // Fetch programs on mount
   useEffect(() => {
-    // Mock course data
-    setCourseOptions([
-      { id: 1, code: 'ITCP 106', name: 'Computer Programming 2', description: 'Intermediate Programming', units: 3, program: 'BSIT', year_level: 'second_year', semester: 'second_sem' },
-      { id: 2, code: 'ITDS 108', name: 'Data Structures and Algorithms', description: 'Data Structures', units: 3, program: 'BSIT', year_level: 'second_year', semester: 'second_sem' },
-      { id: 3, code: 'ITEL 109', name: 'Discrete Mathematics', description: 'Discrete Math', units: 3, program: 'BSIT', year_level: 'second_year', semester: 'second_sem' },
-      { id: 4, code: 'ITEL 110', name: 'Fundamentals of Database Systems', description: 'Database Systems', units: 3, program: 'BSIT', year_level: 'second_year', semester: 'second_sem' },
-    ]);
-
-    // Mock instructor data
+    loadPrograms();
+    
+    // Mock instructor data (in real app, fetch from API)
     setInstructorOptions([
       'Ronilo Gayutin',
       'Maria Santos',
@@ -112,9 +131,86 @@ export default function CreateSchedulePage() {
     ]);
   }, []);
 
+  // Fetch courses when program, year level, or semester changes
+  useEffect(() => {
+    if (selectedProgram && selectedYearLevel && selectedSemester) {
+      loadCourses(selectedProgram, selectedYearLevel, selectedSemester);
+    } else {
+      setCourseOptions([]);
+      // 🔴 FIXED: Inline reset instead of clearCourseSelections
+      setScheduleRows(prev =>
+        prev.map(row => ({
+          ...row,
+          courseId: '',
+          courseCode: '',
+          courseTitle: '',
+          yearLevel: selectedYearLevel || row.yearLevel,
+          semester: selectedSemester || row.semester,
+        }))
+      );
+    }
+  }, [selectedProgram, selectedYearLevel, selectedSemester]);
+
+  const loadPrograms = async () => {
+    try {
+      const data = await fetchPrograms();
+      setPrograms(data);
+    } catch (error) {
+      console.error('Error fetching programs:', error);
+    }
+  };
+
+  const loadCourses = async (programId: string, yearLevel: string, semester: string) => {
+    setIsLoadingCourses(true);
+    try {
+      // 🟢 FIXED: Now passes all three parameters
+      const data = await fetchCourses(programId, yearLevel, semester);
+      setCourseOptions(data);
+    } catch (error) {
+      console.error('Error fetching courses:', error);
+      setCourseOptions([]);
+    } finally {
+      setIsLoadingCourses(false);
+    }
+  };
+
+  const handleProgramChange = (value: string) => {
+    setSelectedProgram(value);
+    // Don't clear year level and semester when program changes
+  };
+
+  const handleYearLevelChange = (value: string) => {
+    setSelectedYearLevel(value);
+    // Update year level in all existing rows
+    setScheduleRows(prevRows => 
+      prevRows.map(row => ({
+        ...row,
+        yearLevel: value,
+      }))
+    );
+  };
+
+  const handleSemesterChange = (value: string) => {
+    setSelectedSemester(value);
+    // Update semester in all existing rows
+    setScheduleRows(prevRows => 
+      prevRows.map(row => ({
+        ...row,
+        semester: value,
+      }))
+    );
+  };
+
   const addRow = () => {
+    // Prevent adding rows if filters aren't complete
+    if (!selectedProgram || !selectedYearLevel || !selectedSemester) {
+      alert('Please select Program, Year Level, and Semester first');
+      return;
+    }
+
     const newRow: ScheduleRow = {
       id: Date.now(),
+      courseId: '',
       courseCode: '',
       courseTitle: '',
       days: '',
@@ -122,10 +218,9 @@ export default function CreateSchedulePage() {
       endTime: '',
       instructor: '',
       room: '',
-      section: '',
-      program: 'BSIT',
-      yearLevel: 'second_year',
-      semester: 'second_sem',
+      program: selectedProgram,
+      yearLevel: selectedYearLevel,
+      semester: selectedSemester,
     };
     setScheduleRows([...scheduleRows, newRow]);
   };
@@ -139,15 +234,21 @@ export default function CreateSchedulePage() {
   const updateRow = (id: number, field: keyof ScheduleRow, value: string) => {
     setScheduleRows(scheduleRows.map(row => {
       if (row.id === id) {
-        // Auto-populate course title when course code is selected
+        // When courseCode changes, find the course and update all fields
         if (field === 'courseCode' && value) {
-          const selectedCourse = courseOptions.find(course => course.code === value);
+          const selectedCourse = courseOptions.find(course => course.course_code === value);
           if (selectedCourse) {
+            // Validate that the selected course matches the filters
+            if (selectedCourse.year_level !== selectedYearLevel) {
+              alert(`Selected course is for ${selectedCourse.year_level.replace('_', ' ')}, but you've selected ${selectedYearLevel.replace('_', ' ')}. Please choose a course that matches the selected year level.`);
+              return row; // Don't update
+            }
+            
             return { 
               ...row, 
               [field]: value,
-              courseTitle: selectedCourse.name,
-              program: selectedCourse.program,
+              courseId: selectedCourse.id,
+              courseTitle: selectedCourse.course_title,
               yearLevel: selectedCourse.year_level,
               semester: selectedCourse.semester
             };
@@ -198,39 +299,33 @@ export default function CreateSchedulePage() {
     }
     
     try {
-      // Create schedules (mock implementation)
-      setTimeout(() => {
-        // Save to localStorage for demo
-        const schedules = JSON.parse(localStorage.getItem('schedules') || '[]');
-        scheduleRows.forEach(row => {
-          schedules.push({
-            id: Date.now() + row.id,
-            time_slot: `${row.startTime} - ${row.endTime}`,
-            days: row.days,
-            course_code: row.courseCode,
-            course_description: row.courseTitle,
-            instructor: row.instructor,
-            room: row.room,
-            section: row.section,
-            program: row.program,
-            year_level: row.yearLevel,
-            semester: row.semester,
-            created_at: new Date().toISOString(),
-            status: 'active'
-          });
-        });
-        localStorage.setItem('schedules', JSON.stringify(schedules));
-        
-        setShowSuccess(true);
-        
-        // Redirect after 2 seconds
-        setTimeout(() => {
-          router.push('/admin');
-        }, 2000);
-      }, 1000);
+      // Prepare schedule data for backend
+      const scheduleData = scheduleRows.map(row => ({
+        course_id: row.courseId,
+        course_code: row.courseCode,
+        course_title: row.courseTitle,
+        days: row.days,
+        start_time: row.startTime,
+        end_time: row.endTime,
+        instructor: row.instructor,
+        room: row.room,
+        program_id: selectedProgram,
+        year_level: row.yearLevel,
+        semester: row.semester,
+      }));
       
+      // Save to backend
+      await createSchedules(scheduleData);
+      
+      setShowSuccess(true);
+      
+      // Redirect after 2 seconds
+      setTimeout(() => {
+        router.push('/admin');
+      }, 2000);
     } catch (error: any) {
-      alert('Error creating schedule: ' + error.message);
+      alert('Error creating schedule: ' + (error.message || 'Unknown error'));
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -238,6 +333,8 @@ export default function CreateSchedulePage() {
   const completedRows = scheduleRows.filter(row => 
     row.courseCode && row.days && row.startTime && row.endTime && row.instructor && row.room
   ).length;
+
+  const areFiltersComplete = selectedProgram && selectedYearLevel && selectedSemester;
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
@@ -301,6 +398,7 @@ export default function CreateSchedulePage() {
           <Button 
             onClick={addRow}
             variant="outline"
+            disabled={!areFiltersComplete}
             className="border-border text-foreground hover:bg-accent/50"
           >
             <Plus className="h-4 w-4 mr-2" />
@@ -309,11 +407,119 @@ export default function CreateSchedulePage() {
         </div>
       </motion.div>
 
+      {/* Program, Year Level & Semester Filters */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="mb-6"
+      >
+        <Card className="p-6">
+          <div className="grid md:grid-cols-3 gap-4">
+            {/* Program */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Program
+              </label>
+              <div className="relative">
+                <select
+                  value={selectedProgram}
+                  onChange={(e) => handleProgramChange(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-card text-foreground px-3 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value="">Select a program</option>
+                  {programs.map(program => (
+                    <option key={program.id} value={program.id}>
+                      {program.code} - {program.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              </div>
+            </div>
+            
+            {/* Year Level */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Year Level
+              </label>
+              <div className="relative">
+                <select
+                  value={selectedYearLevel}
+                  onChange={(e) => handleYearLevelChange(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-card text-foreground px-3 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value="">Select year level</option>
+                  {yearLevelOptions.map(year => (
+                    <option key={year.value} value={year.value}>
+                      {year.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              </div>
+            </div>
+            
+            {/* Semester */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Semester
+              </label>
+              <div className="relative">
+                <select
+                  value={selectedSemester}
+                  onChange={(e) => handleSemesterChange(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-card text-foreground px-3 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value="">Select semester</option>
+                  {semesterOptions.map(sem => (
+                    <option key={sem.value} value={sem.value}>
+                      {sem.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              </div>
+            </div>
+          </div>
+          
+          {areFiltersComplete && (
+            <div className="mt-4 p-3 bg-primary/5 rounded-lg border border-primary/20">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <BookOpen className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-medium text-foreground">
+                    {courseOptions.length} courses available for {yearLevelOptions.find(y => y.value === selectedYearLevel)?.label} {semesterOptions.find(s => s.value === selectedSemester)?.label}
+                  </span>
+                </div>
+                {isLoadingCourses && (
+                  <div className="flex items-center gap-2">
+                    <div className="h-2 w-2 animate-pulse rounded-full bg-primary"></div>
+                    <span className="text-xs text-muted-foreground">Loading courses...</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          
+          {!areFiltersComplete && (
+            <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="h-4 w-4 text-amber-600" />
+                <span className="text-sm font-medium text-amber-800">
+                  Please select Program, Year Level, and Semester to load available courses
+                </span>
+              </div>
+            </div>
+          )}
+        </Card>
+      </motion.div>
+
       <form onSubmit={handleSubmit} className="space-y-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
+          transition={{ delay: 0.2 }}
         >
           <Card>
             <div className="overflow-x-auto">
@@ -321,12 +527,15 @@ export default function CreateSchedulePage() {
                 <thead className="bg-accent/30">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                      Course
+                      Course Code
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Course Title
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                       Days
                     </th>
-                    <th className="px6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                       Time
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -336,9 +545,6 @@ export default function CreateSchedulePage() {
                       Room
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                      Section
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
@@ -346,28 +552,34 @@ export default function CreateSchedulePage() {
                 <tbody className="bg-card divide-y divide-border">
                   {scheduleRows.map((row, rowIndex) => (
                     <tr key={row.id} className="hover:bg-accent/10 transition-colors">
-                      {/* Course Code & Title */}
+                      {/* Course Code */}
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="space-y-2">
-                          <div className="relative">
-                            <select
-                              value={row.courseCode}
-                              onChange={(e) => updateRow(row.id, 'courseCode', e.target.value)}
-                              className="w-full rounded-lg border border-border bg-card text-foreground px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                            >
-                              <option value="">Select Course</option>
-                              {courseOptions.map(course => (
-                                <option key={course.id} value={course.code}>
-                                  {course.code} - {course.name}
-                                </option>
-                              ))}
-                            </select>
-                            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                          </div>
-                          {row.courseTitle && (
-                            <div className="text-xs text-muted-foreground px-1">{row.courseTitle}</div>
-                          )}
+                        <div className="relative">
+                          <select
+                            value={row.courseCode}
+                            onChange={(e) => updateRow(row.id, 'courseCode', e.target.value)}
+                            className="w-full rounded-lg border border-border bg-card text-foreground px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            disabled={!areFiltersComplete}
+                          >
+                            <option value="">Select Course</option>
+                            {courseOptions.map(course => (
+                              <option key={course.id} value={course.course_code}>
+                                {course.course_code}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                         </div>
+                      </td>
+                      
+                      {/* Course Title */}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <Input
+                          value={row.courseTitle}
+                          readOnly
+                          placeholder="Auto-filled from course selection"
+                          className="text-sm bg-muted border-border text-muted-foreground"
+                        />
                       </td>
                       
                       {/* Days */}
@@ -463,16 +675,6 @@ export default function CreateSchedulePage() {
                         </div>
                       </td>
                       
-                      {/* Section */}
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <Input
-                          value={row.section}
-                          onChange={(e) => updateRow(row.id, 'section', e.target.value)}
-                          placeholder="e.g., BSIT 2A"
-                          className="text-sm bg-card border-border"
-                        />
-                      </td>
-                      
                       {/* Actions */}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <Button
@@ -527,6 +729,7 @@ export default function CreateSchedulePage() {
                 <Button 
                   onClick={addRow}
                   variant="outline"
+                  disabled={!areFiltersComplete}
                   className="border-border text-foreground hover:bg-accent/50 w-full sm:w-auto"
                 >
                   <Plus className="h-4 w-4 mr-2" />
@@ -535,7 +738,7 @@ export default function CreateSchedulePage() {
                 <Button 
                   type="submit" 
                   loading={isSubmitting} 
-                  disabled={showSuccess}
+                  disabled={showSuccess || !areFiltersComplete}
                   className="bg-primary text-primary-foreground hover:bg-primary/90 w-full sm:w-auto"
                 >
                   <Save className="h-4 w-4 mr-2" />
@@ -560,36 +763,36 @@ export default function CreateSchedulePage() {
               <li className="flex items-start gap-3 p-3 rounded-lg bg-accent/10">
                 <CheckCircle className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
                 <div>
-                  <span className="font-medium text-foreground">Each row</span>
-                  <span className="text-muted-foreground"> represents one subject/course</span>
-                </div>
-              </li>
-              <li className="flex items-start gap-3 p-3 rounded-lg bg-accent/10">
-                <CheckCircle className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-                <div>
-                  <span className="font-medium text-foreground">Use Add Row</span>
-                  <span className="text-muted-foreground"> to schedule multiple courses</span>
-                </div>
-              </li>
-              <li className="flex items-start gap-3 p-3 rounded-lg bg-accent/10">
-                <CheckCircle className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-                <div>
-                  <span className="font-medium text-foreground">Time slots</span>
-                  <span className="text-muted-foreground"> must be in 20 or 40 minute increments</span>
-                </div>
-              </li>
-              <li className="flex items-start gap-3 p-3 rounded-lg bg-accent/10">
-                <CheckCircle className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-                <div>
-                  <span className="font-medium text-foreground">All dropdowns are required</span>
-                  <span className="text-muted-foreground"> except Section</span>
+                  <span className="font-medium text-foreground">Select Program, Year Level, and Semester first</span>
+                  <span className="text-muted-foreground"> to load available courses</span>
                 </div>
               </li>
               <li className="flex items-start gap-3 p-3 rounded-lg bg-accent/10">
                 <CheckCircle className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
                 <div>
                   <span className="font-medium text-foreground">Course selection</span>
-                  <span className="text-muted-foreground"> will auto-populate other details</span>
+                  <span className="text-muted-foreground"> will auto-populate course title and details</span>
+                </div>
+              </li>
+              <li className="flex items-start gap-3 p-3 rounded-lg bg-accent/10">
+                <CheckCircle className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                <div>
+                  <span className="font-medium text-foreground">Courses are filtered by</span>
+                  <span className="text-muted-foreground"> Program + Year Level + Semester</span>
+                </div>
+              </li>
+              <li className="flex items-start gap-3 p-3 rounded-lg bg-accent/10">
+                <CheckCircle className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                <div>
+                  <span className="font-medium text-foreground">Changing filters</span>
+                  <span className="text-muted-foreground"> will clear course selections</span>
+                </div>
+              </li>
+              <li className="flex items-start gap-3 p-3 rounded-lg bg-accent/10">
+                <CheckCircle className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                <div>
+                  <span className="font-medium text-foreground">All fields are required</span>
+                  <span className="text-muted-foreground"> for schedule creation</span>
                 </div>
               </li>
             </ul>

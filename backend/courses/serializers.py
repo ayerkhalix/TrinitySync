@@ -44,6 +44,20 @@ class CourseSerializer(serializers.ModelSerializer):
         return data
 
 
+class SimpleCourseSerializer(serializers.ModelSerializer):
+    """Simplified serializer for dropdown selection"""
+    class Meta:
+        model = Course
+        fields = ['id', 'course_code', 'course_title', 'year_level', 'semester', 'units']
+        read_only_fields = ['id', 'course_code', 'course_title', 'year_level', 'semester', 'units']
+
+
+class CourseFilterSerializer(serializers.Serializer):
+    """Serializer for course filtering"""
+    program = serializers.UUIDField(required=True)
+    semester = serializers.ChoiceField(choices=Course.SemesterType.choices, required=True)
+
+
 class CoursePrerequisiteSerializer(serializers.ModelSerializer):
     course_code = serializers.CharField(source='course.course_code', read_only=True)
     course_title = serializers.CharField(source='course.course_title', read_only=True)
