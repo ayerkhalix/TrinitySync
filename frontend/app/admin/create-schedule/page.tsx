@@ -1,18 +1,27 @@
 // app/admin/create-schedule/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { 
   ArrowLeft, Save, Clock, CalendarDays, User, 
   Building, BookOpen, AlertCircle, CheckCircle,
-  Filter, Plus, Trash2, ChevronDown, XCircle
+  Filter, Plus, Trash2, ChevronDown, XCircle,
+  AlertTriangle, Info, Loader2
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useRouter } from 'next/navigation';
 import { apiFetch, fetchPrograms, fetchCourses, createSchedules } from '@/lib/api';
+import { useScheduleConflicts } from '@/hooks/useScheduleConflicts';
+import { 
+  ScheduleRow as ScheduleRowType,
+  isRowComplete,
+  getRowColor,
+  hasCriticalConflicts as hasRowCriticalConflicts,
+  Conflict
+} from '@/lib/utils/scheduleConflicts';
 
 interface ScheduleRow {
   id: number;
@@ -116,6 +125,23 @@ export default function CreateSchedulePage() {
     return { display: timeString, value: militaryTime };
   });
 
+  // Use the conflict detection hook
+  const {
+    rowConflicts,
+    checkingRows,
+    localConflicts,
+    checkRowConflicts,
+    checkRowConflictsDebounced,
+    checkAllRowsConflicts,
+    hasCriticalConflicts,
+    getConflictsForRow,
+    clearRowConflicts,
+    clearAllConflicts
+  } = useScheduleConflicts({
+    scheduleGroupId: selectedProgram || 'temp', // Temporary ID for conflict checking
+    rows: scheduleRows as ScheduleRowType[]
+  });
+
   // Fetch programs on mount
   useEffect(() => {
     loadPrograms();
@@ -137,7 +163,7 @@ export default function CreateSchedulePage() {
       loadCourses(selectedProgram, selectedYearLevel, selectedSemester);
     } else {
       setCourseOptions([]);
-      // 🔴 FIXED: Inline reset instead of clearCourseSelections
+      // Clear course selections when filters change
       setScheduleRows(prev =>
         prev.map(row => ({
           ...row,
@@ -148,6 +174,8 @@ export default function CreateSchedulePage() {
           semester: selectedSemester || row.semester,
         }))
       );
+      // Clear all conflicts when filters change
+      clearAllConflicts();
     }
   }, [selectedProgram, selectedYearLevel, selectedSemester]);
 
@@ -163,7 +191,6 @@ export default function CreateSchedulePage() {
   const loadCourses = async (programId: string, yearLevel: string, semester: string) => {
     setIsLoadingCourses(true);
     try {
-      // 🟢 FIXED: Now passes all three parameters
       const data = await fetchCourses(programId, yearLevel, semester);
       setCourseOptions(data);
     } catch (error) {
@@ -176,7 +203,6 @@ export default function CreateSchedulePage() {
 
   const handleProgramChange = (value: string) => {
     setSelectedProgram(value);
-    // Don't clear year level and semester when program changes
   };
 
   const handleYearLevelChange = (value: string) => {
@@ -227,13 +253,18 @@ export default function CreateSchedulePage() {
 
   const removeRow = (id: number) => {
     if (scheduleRows.length > 1) {
+      const rowIndex = scheduleRows.findIndex(row => row.id === id);
       setScheduleRows(scheduleRows.filter(row => row.id !== id));
+      // Clear conflicts for the removed row
+      clearRowConflicts(rowIndex);
     }
   };
 
   const updateRow = (id: number, field: keyof ScheduleRow, value: string) => {
-    setScheduleRows(scheduleRows.map(row => {
+    const newRows = scheduleRows.map(row => {
       if (row.id === id) {
+        const updatedRow = { ...row, [field]: value };
+        
         // When courseCode changes, find the course and update all fields
         if (field === 'courseCode' && value) {
           const selectedCourse = courseOptions.find(course => course.course_code === value);
@@ -245,8 +276,7 @@ export default function CreateSchedulePage() {
             }
             
             return { 
-              ...row, 
-              [field]: value,
+              ...updatedRow, 
               courseId: selectedCourse.id,
               courseTitle: selectedCourse.course_title,
               yearLevel: selectedCourse.year_level,
@@ -254,10 +284,28 @@ export default function CreateSchedulePage() {
             };
           }
         }
-        return { ...row, [field]: value };
+        return updatedRow;
       }
       return row;
-    }));
+    });
+    
+    setScheduleRows(newRows);
+    
+    // Find the updated row and check for conflicts
+    const updatedRowIndex = newRows.findIndex(row => row.id === id);
+    if (updatedRowIndex !== -1) {
+      const updatedRow = newRows[updatedRowIndex];
+      
+      // Clear conflicts if row becomes incomplete
+      if (!isRowComplete(updatedRow as ScheduleRowType)) {
+        clearRowConflicts(updatedRowIndex);
+      } else {
+        // Check conflicts after a short delay
+        setTimeout(() => {
+          checkRowConflictsDebounced(updatedRow as ScheduleRowType, updatedRowIndex);
+        }, 100);
+      }
+    }
   };
 
   const validateForm = () => {
@@ -280,6 +328,13 @@ export default function CreateSchedulePage() {
         }
       }
     });
+    
+    // Check for critical conflicts
+    if (hasCriticalConflicts()) {
+      alert('Please resolve all critical conflicts before saving.');
+      isValid = false;
+    }
+    
     return isValid;
   };
 
@@ -331,10 +386,61 @@ export default function CreateSchedulePage() {
   };
 
   const completedRows = scheduleRows.filter(row => 
-    row.courseCode && row.days && row.startTime && row.endTime && row.instructor && row.room
+    isRowComplete(row as ScheduleRowType)
   ).length;
 
   const areFiltersComplete = selectedProgram && selectedYearLevel && selectedSemester;
+
+  // Function to render conflict badges for a row
+  const renderConflictBadges = (rowIndex: number) => {
+    const conflicts = getConflictsForRow(rowIndex);
+    if (!conflicts || conflicts.length === 0) return null;
+    
+    const criticalCount = conflicts.filter(c => c.severity >= 9).length;
+    const warningCount = conflicts.filter(c => c.severity >= 6 && c.severity < 9).length;
+    
+    return (
+      <div className="flex gap-1 mt-1">
+        {criticalCount > 0 && (
+          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+            <AlertCircle className="h-3 w-3 mr-1" />
+            {criticalCount} critical
+          </span>
+        )}
+        {warningCount > 0 && (
+          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+            <AlertTriangle className="h-3 w-3 mr-1" />
+            {warningCount} warnings
+          </span>
+        )}
+      </div>
+    );
+  };
+
+  // Function to render conflict tooltip
+  const renderConflictTooltip = (rowIndex: number) => {
+    const conflicts = getConflictsForRow(rowIndex);
+    if (!conflicts || conflicts.length === 0) return null;
+    
+    return (
+      <div className="absolute z-50 hidden group-hover:block bg-white border border-gray-200 rounded-lg shadow-lg p-3 w-64 -mt-2 ml-4">
+        <div className="text-sm font-medium text-gray-900 mb-2">Conflicts:</div>
+        <div className="space-y-2">
+          {conflicts.map((conflict, index) => (
+            <div key={index} className={`text-xs p-2 rounded ${
+              conflict.severity >= 9 ? 'bg-red-50 text-red-700 border border-red-200' :
+              conflict.severity >= 6 ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+              'bg-blue-50 text-blue-700 border border-blue-200'
+            }`}>
+              <div className="font-medium">{conflict.type.toUpperCase()} CONFLICT</div>
+              <div>{conflict.message}</div>
+              <div className="text-xs opacity-75 mt-1">Source: {conflict.source}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
@@ -406,6 +512,29 @@ export default function CreateSchedulePage() {
           </Button>
         </div>
       </motion.div>
+
+      {/* Conflict Summary Alert */}
+      {hasCriticalConflicts() && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6"
+        >
+          <Card className="border-l-4 border-l-red-500">
+            <div className="p-4">
+              <div className="flex items-center space-x-3">
+                <AlertCircle className="h-6 w-6 text-red-500" />
+                <div>
+                  <h3 className="font-semibold text-red-900 mb-1">Critical Conflicts Detected!</h3>
+                  <p className="text-sm text-red-700">
+                    Please resolve all critical conflicts (highlighted in red) before saving.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </motion.div>
+      )}
 
       {/* Program, Year Level & Semester Filters */}
       <motion.div
@@ -550,146 +679,190 @@ export default function CreateSchedulePage() {
                   </tr>
                 </thead>
                 <tbody className="bg-card divide-y divide-border">
-                  {scheduleRows.map((row, rowIndex) => (
-                    <tr key={row.id} className="hover:bg-accent/10 transition-colors">
-                      {/* Course Code */}
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="relative">
-                          <select
-                            value={row.courseCode}
-                            onChange={(e) => updateRow(row.id, 'courseCode', e.target.value)}
-                            className="w-full rounded-lg border border-border bg-card text-foreground px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                            disabled={!areFiltersComplete}
-                          >
-                            <option value="">Select Course</option>
-                            {courseOptions.map(course => (
-                              <option key={course.id} value={course.course_code}>
-                                {course.course_code}
-                              </option>
-                            ))}
-                          </select>
-                          <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                        </div>
-                      </td>
-                      
-                      {/* Course Title */}
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <Input
-                          value={row.courseTitle}
-                          readOnly
-                          placeholder="Auto-filled from course selection"
-                          className="text-sm bg-muted border-border text-muted-foreground"
-                        />
-                      </td>
-                      
-                      {/* Days */}
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="relative">
-                          <select
-                            value={row.days}
-                            onChange={(e) => updateRow(row.id, 'days', e.target.value)}
-                            className="w-full rounded-lg border border-border bg-card text-foreground px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                          >
-                            <option value="">Select Days</option>
-                            {daysOptions.map(day => (
-                              <option key={day} value={day}>{day}</option>
-                            ))}
-                          </select>
-                          <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                        </div>
-                      </td>
-                      
-                      {/* Time (Start & End) */}
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex space-x-2">
-                          <div className="relative flex-1">
+                  {scheduleRows.map((row, rowIndex) => {
+                    const conflicts = getConflictsForRow(rowIndex);
+                    const rowStyle = {
+                      backgroundColor: getRowColor(conflicts),
+                      transition: 'background-color 0.3s ease'
+                    };
+                    
+                    return (
+                      <tr 
+                        key={row.id} 
+                        className="hover:bg-accent/10 transition-colors group relative"
+                        style={rowStyle}
+                      >
+                        {/* Course Code */}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="relative">
                             <select
-                              value={row.startTime}
-                              onChange={(e) => updateRow(row.id, 'startTime', e.target.value)}
-                              className="w-full rounded-lg border border-border bg-card text-foreground px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                              value={row.courseCode}
+                              onChange={(e) => updateRow(row.id, 'courseCode', e.target.value)}
+                              className={`w-full rounded-lg border ${
+                                conflicts.some(c => c.type === 'course') 
+                                  ? 'border-red-300' 
+                                  : 'border-border'
+                              } bg-card text-foreground px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                              disabled={!areFiltersComplete}
                             >
-                              <option value="">Start</option>
-                              {timeOptions.map(time => (
-                                <option key={time.value} value={time.value}>
-                                  {time.display}
+                              <option value="">Select Course</option>
+                              {courseOptions.map(course => (
+                                <option key={course.id} value={course.course_code}>
+                                  {course.course_code}
                                 </option>
                               ))}
                             </select>
                             <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                           </div>
-                          <div className="relative flex-1">
+                          {checkingRows[rowIndex] && (
+                            <div className="mt-1 flex items-center text-xs text-muted-foreground">
+                              <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                              Checking conflicts...
+                            </div>
+                          )}
+                          {renderConflictBadges(rowIndex)}
+                          {renderConflictTooltip(rowIndex)}
+                        </td>
+                        
+                        {/* Course Title */}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <Input
+                            value={row.courseTitle}
+                            readOnly
+                            placeholder="Auto-filled from course selection"
+                            className="text-sm bg-muted border-border text-muted-foreground"
+                          />
+                        </td>
+                        
+                        {/* Days */}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="relative">
                             <select
-                              value={row.endTime}
-                              onChange={(e) => updateRow(row.id, 'endTime', e.target.value)}
-                              className="w-full rounded-lg border border-border bg-card text-foreground px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                              value={row.days}
+                              onChange={(e) => updateRow(row.id, 'days', e.target.value)}
+                              className={`w-full rounded-lg border ${
+                                conflicts.some(c => c.type === 'time' || c.type === 'section') 
+                                  ? 'border-red-300' 
+                                  : 'border-border'
+                              } bg-card text-foreground px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20`}
                             >
-                              <option value="">End</option>
-                              {timeOptions.map(time => (
-                                <option key={time.value} value={time.value}>
-                                  {time.display}
-                                </option>
+                              <option value="">Select Days</option>
+                              {daysOptions.map(day => (
+                                <option key={day} value={day}>{day}</option>
                               ))}
                             </select>
                             <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                           </div>
-                        </div>
-                        {row.startTime && row.endTime && (
-                          <div className="text-xs text-muted-foreground mt-1">
-                            Duration: {Math.round((convertToMinutes(row.endTime) - convertToMinutes(row.startTime)) / 60)}h 
-                            {(convertToMinutes(row.endTime) - convertToMinutes(row.startTime)) % 60}m
+                        </td>
+                        
+                        {/* Time (Start & End) */}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex space-x-2">
+                            <div className="relative flex-1">
+                              <select
+                                value={row.startTime}
+                                onChange={(e) => updateRow(row.id, 'startTime', e.target.value)}
+                                className={`w-full rounded-lg border ${
+                                  conflicts.some(c => c.type === 'time' || c.type === 'section') 
+                                    ? 'border-red-300' 
+                                    : 'border-border'
+                                } bg-card text-foreground px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                              >
+                                <option value="">Start</option>
+                                {timeOptions.map(time => (
+                                  <option key={time.value} value={time.value}>
+                                    {time.display}
+                                  </option>
+                                ))}
+                              </select>
+                              <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                            </div>
+                            <div className="relative flex-1">
+                              <select
+                                value={row.endTime}
+                                onChange={(e) => updateRow(row.id, 'endTime', e.target.value)}
+                                className={`w-full rounded-lg border ${
+                                  conflicts.some(c => c.type === 'time' || c.type === 'section') 
+                                    ? 'border-red-300' 
+                                    : 'border-border'
+                                } bg-card text-foreground px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                              >
+                                <option value="">End</option>
+                                {timeOptions.map(time => (
+                                  <option key={time.value} value={time.value}>
+                                    {time.display}
+                                  </option>
+                                ))}
+                              </select>
+                              <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                            </div>
                           </div>
-                        )}
-                      </td>
-                      
-                      {/* Instructor */}
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="relative">
-                          <select
-                            value={row.instructor}
-                            onChange={(e) => updateRow(row.id, 'instructor', e.target.value)}
-                            className="w-full rounded-lg border border-border bg-card text-foreground px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                          {row.startTime && row.endTime && (
+                            <div className="text-xs text-muted-foreground mt-1">
+                              Duration: {Math.round((convertToMinutes(row.endTime) - convertToMinutes(row.startTime)) / 60)}h 
+                              {(convertToMinutes(row.endTime) - convertToMinutes(row.startTime)) % 60}m
+                            </div>
+                          )}
+                        </td>
+                        
+                        {/* Instructor */}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="relative">
+                            <select
+                              value={row.instructor}
+                              onChange={(e) => updateRow(row.id, 'instructor', e.target.value)}
+                              className={`w-full rounded-lg border ${
+                                conflicts.some(c => c.type === 'instructor') 
+                                  ? 'border-red-300' 
+                                  : 'border-border'
+                              } bg-card text-foreground px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                            >
+                              <option value="">Select Instructor</option>
+                              {instructorOptions.map(instructor => (
+                                <option key={instructor} value={instructor}>{instructor}</option>
+                              ))}
+                            </select>
+                            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                          </div>
+                        </td>
+                        
+                        {/* Room */}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="relative">
+                            <select
+                              value={row.room}
+                              onChange={(e) => updateRow(row.id, 'room', e.target.value)}
+                              className={`w-full rounded-lg border ${
+                                conflicts.some(c => c.type === 'room') 
+                                  ? 'border-red-300' 
+                                  : 'border-border'
+                              } bg-card text-foreground px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                            >
+                              <option value="">Select Room</option>
+                              {roomOptions.map(room => (
+                                <option key={room} value={room}>{room}</option>
+                              ))}
+                            </select>
+                            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                          </div>
+                        </td>
+                        
+                        {/* Actions */}
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeRow(row.id)}
+                            disabled={scheduleRows.length <= 1}
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
                           >
-                            <option value="">Select Instructor</option>
-                            {instructorOptions.map(instructor => (
-                              <option key={instructor} value={instructor}>{instructor}</option>
-                            ))}
-                          </select>
-                          <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                        </div>
-                      </td>
-                      
-                      {/* Room */}
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="relative">
-                          <select
-                            value={row.room}
-                            onChange={(e) => updateRow(row.id, 'room', e.target.value)}
-                            className="w-full rounded-lg border border-border bg-card text-foreground px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                          >
-                            <option value="">Select Room</option>
-                            {roomOptions.map(room => (
-                              <option key={room} value={room}>{room}</option>
-                            ))}
-                          </select>
-                          <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                        </div>
-                      </td>
-                      
-                      {/* Actions */}
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeRow(row.id)}
-                          disabled={scheduleRows.length <= 1}
-                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -700,16 +873,15 @@ export default function CreateSchedulePage() {
                 <div className="text-sm text-muted-foreground">
                   Total courses: <span className="font-semibold text-foreground">{scheduleRows.length}</span>
                 </div>
-                <div className="flex items-center gap-4">
-                  <div className="text-sm text-muted-foreground">
-                    <span className="font-semibold text-foreground">{completedRows}</span> / {scheduleRows.length} rows complete
-                  </div>
-                  <div className="h-4 w-4 rounded-full bg-primary/10 border-2 border-primary flex items-center justify-center">
-                    <div 
-                      className="h-2 w-2 rounded-full bg-primary animate-pulse"
-                      style={{ animationDuration: '1.5s' }}
-                    />
-                  </div>
+                <div className="text-sm text-muted-foreground">
+                  Complete rows: <span className="font-semibold text-foreground">{completedRows}</span> / {scheduleRows.length}
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  Critical conflicts: <span className={`font-semibold ${hasCriticalConflicts() ? 'text-red-600' : 'text-foreground'}`}>
+                    {Object.values(rowConflicts).filter(conflicts => 
+                      conflicts?.some(c => c.severity >= 9)
+                    ).length}
+                  </span>
                 </div>
               </div>
             </div>
@@ -736,10 +908,21 @@ export default function CreateSchedulePage() {
                   Add Another Row
                 </Button>
                 <Button 
+                  onClick={() => checkAllRowsConflicts()}
+                  variant="outline"
+                  disabled={!areFiltersComplete || isSubmitting}
+                  className="border-border text-foreground hover:bg-accent/50 w-full sm:w-auto"
+                >
+                  <AlertCircle className="h-4 w-4 mr-2" />
+                  Check All Conflicts
+                </Button>
+                <Button 
                   type="submit" 
                   loading={isSubmitting} 
-                  disabled={showSuccess || !areFiltersComplete}
-                  className="bg-primary text-primary-foreground hover:bg-primary/90 w-full sm:w-auto"
+                  disabled={showSuccess || !areFiltersComplete || hasCriticalConflicts()}
+                  className={`bg-primary text-primary-foreground hover:bg-primary/90 w-full sm:w-auto ${
+                    hasCriticalConflicts() ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
                 >
                   <Save className="h-4 w-4 mr-2" />
                   Save All Schedules
@@ -777,15 +960,15 @@ export default function CreateSchedulePage() {
               <li className="flex items-start gap-3 p-3 rounded-lg bg-accent/10">
                 <CheckCircle className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
                 <div>
-                  <span className="font-medium text-foreground">Courses are filtered by</span>
-                  <span className="text-muted-foreground"> Program + Year Level + Semester</span>
+                  <span className="font-medium text-foreground">Real-time conflict detection</span>
+                  <span className="text-muted-foreground"> highlights issues as you fill rows</span>
                 </div>
               </li>
               <li className="flex items-start gap-3 p-3 rounded-lg bg-accent/10">
                 <CheckCircle className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
                 <div>
-                  <span className="font-medium text-foreground">Changing filters</span>
-                  <span className="text-muted-foreground"> will clear course selections</span>
+                  <span className="font-medium text-foreground">Critical conflicts (red)</span>
+                  <span className="text-muted-foreground"> must be resolved before saving</span>
                 </div>
               </li>
               <li className="flex items-start gap-3 p-3 rounded-lg bg-accent/10">
@@ -798,37 +981,100 @@ export default function CreateSchedulePage() {
             </ul>
           </Card>
 
-          {/* Conflict Detection */}
+          {/* Conflict Detection Status */}
           <Card>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-destructive/10 text-destructive">
+                <div className={`p-2 rounded-lg ${
+                  hasCriticalConflicts() 
+                    ? 'bg-red-100 text-red-600' 
+                    : localConflicts.length > 0 
+                    ? 'bg-amber-100 text-amber-600' 
+                    : 'bg-emerald-100 text-emerald-600'
+                }`}>
                   <AlertCircle className="h-5 w-5" />
                 </div>
                 <h3 className="text-lg font-semibold text-foreground">Conflict Detection</h3>
               </div>
-              <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+              <div className={`h-2 w-2 rounded-full animate-pulse ${
+                hasCriticalConflicts() ? 'bg-red-500' : 'bg-primary'
+              }`} />
             </div>
             <div className="space-y-4">
               <div className="text-sm text-muted-foreground">
-                Real-time conflict checking enabled...
+                Real-time conflict checking is active. Conflicts are checked against both existing schedules and other rows in this form.
               </div>
-              {scheduleRows.length > 1 && (
+              
+              {completedRows > 0 && (
                 <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
-                  <div className="flex items-center gap-3">
-                    <Clock className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-medium text-foreground">
-                      {scheduleRows.length} courses being monitored for conflicts
-                    </span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Clock className="h-4 w-4 text-primary" />
+                      <span className="text-sm font-medium text-foreground">
+                        Monitoring {completedRows} complete row(s) for conflicts
+                      </span>
+                    </div>
+                    {Object.keys(checkingRows).length > 0 && (
+                      <div className="flex items-center gap-2">
+                        <div className="h-2 w-2 animate-pulse rounded-full bg-primary"></div>
+                        <span className="text-xs text-muted-foreground">Checking...</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
-              <div className="flex items-start gap-3 p-3 rounded-lg bg-accent/10">
-                <XCircle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
-                <div className="text-sm text-muted-foreground">
-                  Conflicts will be automatically detected and highlighted
+              
+              {/* Conflict Summary */}
+              {Object.keys(rowConflicts).length > 0 && (
+                <div className="space-y-3">
+                  <div className="text-sm font-medium text-foreground">Current Conflicts:</div>
+                  
+                  {hasCriticalConflicts() && (
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-red-50 border border-red-200">
+                      <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
+                      <div className="text-sm">
+                        <span className="font-medium text-red-900">Critical conflicts detected</span>
+                        <span className="text-red-700">. You cannot save until these are resolved.</span>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {localConflicts.length > 0 && (
+                    <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200">
+                      <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                      <div className="text-sm">
+                        <span className="font-medium text-amber-900">{localConflicts.length} local conflict(s)</span>
+                        <span className="text-amber-700"> detected between rows in this form.</span>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Conflict Legend */}
+                  <div className="grid grid-cols-3 gap-2 mt-2">
+                    <div className="flex items-center gap-2">
+                      <div className="h-3 w-3 rounded bg-red-100 border border-red-300"></div>
+                      <span className="text-xs text-muted-foreground">Critical</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="h-3 w-3 rounded bg-amber-100 border border-amber-300"></div>
+                      <span className="text-xs text-muted-foreground">Warning</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="h-3 w-3 rounded bg-blue-100 border border-blue-300"></div>
+                      <span className="text-xs text-muted-foreground">Info</span>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
+              
+              {completedRows > 0 && Object.keys(rowConflicts).length === 0 && (
+                <div className="flex items-start gap-3 p-3 rounded-lg bg-emerald-50 border border-emerald-200">
+                  <CheckCircle className="h-4 w-4 text-emerald-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-emerald-700">
+                    No conflicts detected. All rows appear to be conflict-free.
+                  </div>
+                </div>
+              )}
             </div>
           </Card>
         </div>

@@ -144,6 +144,64 @@ export async function createSchedulesMock(schedules: ScheduleData[]) {
   });
 }
 
+export interface ConflictCheckRequest {
+  schedule_group_id: string;
+  day: string;
+  start_time: string;
+  end_time: string;
+  room: string;
+  instructor_id: string | null;
+  exclude_item_id?: string | null;
+}
+
+export interface ConflictCheckResponse {
+  conflicts: Array<{
+    type: string;
+    severity: number;
+    message: string;
+    source: string;
+    conflicting_item_id?: string;
+    conflicting_course_code?: string;
+    conflicting_course_title?: string;
+    conflicting_schedule_group?: string;
+    conflicting_section?: string;
+    conflicting_room?: string;
+  }>;
+  has_critical_conflict: boolean;
+  summary: {
+    total_conflicts: number;
+    critical_conflicts: number;
+    warning_conflicts: number;
+    info_conflicts: number;
+  };
+}
+
+/**
+ * Check conflicts for a single schedule row
+ */
+export const checkRowConflicts = async (
+  data: ConflictCheckRequest
+): Promise<ConflictCheckResponse> => {
+  try {
+    const response = await apiFetch('/api/schedules/check-row-conflicts/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to check conflicts: ${response.statusText}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error checking row conflicts:', error);
+    throw error;
+  }
+};
+
 // Export everything
 export default {
   API_URL,

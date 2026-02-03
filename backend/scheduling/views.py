@@ -9,6 +9,7 @@ from rest_framework.views import APIView
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+import logging
 
 from .models import ScheduleGroup, ScheduleItem, ScheduleConflict, SchoolYear
 from .serializers import (
@@ -17,11 +18,14 @@ from .serializers import (
     ScheduleConflictSerializer,
     SchoolYearSerializer,
     BulkScheduleCreateSerializer,
-    ConflictCheckSerializer
+    ConflictCheckSerializer,
+    CheckRowConflictsSerializer
 )
 from .services.conflict_detector import ConflictDetector
 from .permissions import IsCollegeAdmin, IsSuperAdmin, CanViewScheduleGroup
 from activity_logs.models import ActivityLog
+
+logger = logging.getLogger(__name__)
 
 
 class SchoolYearViewSet(viewsets.ModelViewSet):
@@ -376,3 +380,108 @@ def check_schedule_conflicts(request):
         'conflicts': conflicts,
         'has_conflicts': len(conflicts) > 0
     })
+
+
+class CheckRowConflictsView(APIView):
+    """
+    API endpoint for real-time row-level conflict checking.
+    
+    This endpoint checks a single unsaved schedule row against:
+    1. Existing database schedules
+    2. Does NOT check against other unsaved rows (frontend handles this)
+    3. Does NOT write to database
+    """
+    
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        """
+        Check conflicts for a single schedule row.
+        
+        Request payload:
+        {
+            "schedule_group_id": "uuid",
+            "day": "MON",
+            "start_time": "09:00",
+            "end_time": "11:00",
+            "room": "CL2",
+            "instructor_id": "uuid",  # optional
+            "exclude_item_id": "uuid" # optional (for editing)
+        }
+        
+        Response:
+        {
+            "conflicts": [
+                {
+                    "type": "room",
+                    "severity": 9,
+                    "message": "...",
+                    "source": "database",
+                    "conflicting_item_id": "uuid",
+                    "conflicting_course_code": "CS101",
+                    "conflicting_course_title": "Intro to CS",
+                    "conflicting_schedule_group": "uuid",
+                    "conflicting_section": "A"
+                }
+            ],
+            "has_critical_conflict": true,
+            "summary": {
+                "total_conflicts": 1,
+                "critical_conflicts": 1,
+                "warning_conflicts": 0,
+                "info_conflicts": 0
+            }
+        }
+        """
+        serializer = CheckRowConflictsSerializer(data=request.data)
+        
+        if not serializer.is_valid():
+            return Response({
+                'error': 'Validation failed',
+                'details': serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        validated_data = serializer.validated_data
+        
+        try:
+            # Extract data for conflict checking
+            schedule_group = validated_data['schedule_group']
+            exclude_item_id = validated_data.get('exclude_item_id')
+            
+            # Check conflicts against database
+            db_conflicts = ConflictDetector.check_candidate_conflicts_with_db(
+                day=validated_data['day'],
+                start_time=validated_data['start_time'],
+                end_time=validated_data['end_time'],
+                room=validated_data['room'],
+                instructor_id=validated_data.get('instructor_id'),
+                schedule_group=schedule_group,
+                exclude_item_id=exclude_item_id,
+            )
+            
+            # Categorize conflicts by severity
+            critical_conflicts = [c for c in db_conflicts if c['severity'] >= 9]
+            warning_conflicts = [c for c in db_conflicts if 6 <= c['severity'] <= 8]
+            info_conflicts = [c for c in db_conflicts if c['severity'] <= 5]
+            
+            has_critical_conflict = len(critical_conflicts) > 0
+            
+            response_data = {
+                'conflicts': db_conflicts,
+                'has_critical_conflict': has_critical_conflict,
+                'summary': {
+                    'total_conflicts': len(db_conflicts),
+                    'critical_conflicts': len(critical_conflicts),
+                    'warning_conflicts': len(warning_conflicts),
+                    'info_conflicts': len(info_conflicts),
+                }
+            }
+            
+            return Response(response_data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error checking row conflicts: {str(e)}", exc_info=True)
+            return Response({
+                'error': 'Internal server error',
+                'message': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
