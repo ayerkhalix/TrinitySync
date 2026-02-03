@@ -2,7 +2,7 @@
 from datetime import datetime, time
 from django.db.models import Q
 from django.utils import timezone
-from ..models import ScheduleItem, ScheduleConflict
+from ..models import ScheduleItem, ScheduleConflict, ScheduleGroup
 
 
 class ConflictDetector:
@@ -36,7 +36,7 @@ class ConflictDetector:
                     ConflictDetector._has_time_overlap(item1, item2)):
                     conflicts.append(ConflictDetector._create_conflict(
                         item1, item2, ScheduleConflict.ConflictType.INSTRUCTOR,
-                        f"Instructor {item1.instructor.user.email} double booked"
+                        f"Instructor {item1.instructor.user.email if item1.instructor and hasattr(item1.instructor, 'user') else 'Unknown'} double booked"
                     ))
         
         # Check cross-group conflicts
@@ -64,13 +64,8 @@ class ConflictDetector:
         if item1.day != item2.day:
             return False
         
-        # Convert times to datetime for comparison
-        start1 = datetime.combine(datetime.today(), item1.start_time)
-        end1 = datetime.combine(datetime.today(), item1.end_time)
-        start2 = datetime.combine(datetime.today(), item2.start_time)
-        end2 = datetime.combine(datetime.today(), item2.end_time)
-        
-        return start1 < end2 and start2 < end1
+        # Use simple time comparison
+        return item1.start_time < item2.end_time and item2.start_time < item1.end_time
 
     @staticmethod
     def _create_conflict(item1, item2, conflict_type, description, severity=5):
@@ -140,7 +135,10 @@ class ConflictDetector:
         # Check conflicts among temp items
         for i, item1 in enumerate(temp_items):
             for item2 in temp_items[i+1:]:
-                if ConflictDetector._has_time_overlap(item1, item2):
+                if ConflictDetector._has_time_overlap_simple(
+                    item1.start_time, item1.end_time,
+                    item2.start_time, item2.end_time
+                ):
                     if item1.room and item2.room and item1.room == item2.room:
                         conflicts.append({
                             'type': 'room',
@@ -156,3 +154,133 @@ class ConflictDetector:
                         })
         
         return conflicts
+    
+    @staticmethod
+    def check_candidate_conflicts_with_db(
+        *,
+        day,
+        start_time,
+        end_time,
+        room,
+        instructor_id,
+        schedule_group,
+        exclude_item_id=None,
+    ):
+        """
+        Check a SINGLE UNSAVED schedule row against DATABASE schedules only.
+        No DB writes.
+        
+        Args:
+            day: Day of week (e.g., 'MON')
+            start_time: time object
+            end_time: time object
+            room: string room identifier
+            instructor_id: UUID of instructor (or None)
+            schedule_group: ScheduleGroup instance for context
+            exclude_item_id: Optional item ID to exclude (when editing)
+        
+        Returns:
+            List of conflict dictionaries
+        """
+        conflicts = []
+        
+        # Get base query for same semester and school year
+        base_qs = ScheduleItem.objects.filter(
+            schedule_group__school_year=schedule_group.school_year,
+            schedule_group__semester=schedule_group.semester,
+            day=day
+        )
+        
+        # Optional: Exclude specific item when editing
+        if exclude_item_id:
+            base_qs = base_qs.exclude(id=exclude_item_id)
+        
+        # Use .only() to reduce payload
+        base_qs = base_qs.select_related(
+            'course',
+            'schedule_group',
+            'instructor__user'
+        ).only(
+            'id',
+            'room',
+            'start_time',
+            'end_time',
+            'instructor_id',
+            'course__course_code',
+            'course__course_title',
+            'schedule_group__id',
+            'schedule_group__section',
+            'instructor__user__email'
+        )
+        
+        # Efficient single pass through all relevant schedule items
+        for item in base_qs:
+            has_time_overlap = ConflictDetector._has_time_overlap_simple(
+                start_time, end_time,
+                item.start_time, item.end_time
+            )
+            
+            if not has_time_overlap:
+                continue
+            
+            # Check room conflicts (including same group)
+            if room == item.room:
+                conflicts.append({
+                    "type": ScheduleConflict.ConflictType.ROOM,
+                    "severity": 9,
+                    "message": f"Room {room} already booked for {item.course.course_code} "
+                             f"({item.day} {item.start_time}-{item.end_time})",
+                    "source": "database",
+                    "conflicting_item_id": str(item.id),
+                    "conflicting_course_code": item.course.course_code,
+                    "conflicting_course_title": item.course.course_title,
+                    "conflicting_schedule_group": str(item.schedule_group.id),
+                    "conflicting_section": item.schedule_group.section,
+                })
+            
+            # Check instructor conflicts
+            if instructor_id and item.instructor_id and instructor_id == item.instructor_id:
+                # Safe instructor name access
+                instructor_name = (
+                    item.instructor.user.email
+                    if item.instructor and hasattr(item.instructor, 'user')
+                    else "Instructor"
+                )
+                
+                conflicts.append({
+                    "type": ScheduleConflict.ConflictType.INSTRUCTOR,
+                    "severity": 8,
+                    "message": f"Instructor {instructor_name} already teaching "
+                             f"{item.course.course_code} "
+                             f"({item.day} {item.start_time}-{item.end_time})",
+                    "source": "database",
+                    "conflicting_item_id": str(item.id),
+                    "conflicting_course_code": item.course.course_code,
+                    "conflicting_course_title": item.course.course_title,
+                    "conflicting_schedule_group": str(item.schedule_group.id),
+                    "conflicting_section": item.schedule_group.section,
+                    "conflicting_room": item.room,
+                })
+            
+            # Check if this is the same schedule group (student conflict)
+            if item.schedule_group_id == schedule_group.id:
+                conflicts.append({
+                    "type": ScheduleConflict.ConflictType.SECTION,
+                    "severity": 7,
+                    "message": f"Time overlap with {item.course.course_code} "
+                             f"in same section ({item.day} {item.start_time}-{item.end_time})",
+                    "source": "database",
+                    "conflicting_item_id": str(item.id),
+                    "conflicting_course_code": item.course.course_code,
+                    "conflicting_course_title": item.course.course_title,
+                })
+        
+        return conflicts
+    
+    @staticmethod
+    def _has_time_overlap_simple(start1, end1, start2, end2):
+        """
+        Simple time overlap check using time objects.
+        Returns True if intervals overlap.
+        """
+        return start1 < end2 and start2 < end1

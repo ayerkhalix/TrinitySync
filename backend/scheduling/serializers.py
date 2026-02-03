@@ -2,8 +2,9 @@
 Serializers for the scheduling app.
 """
 from rest_framework import serializers
+from django.utils.translation import gettext_lazy as _
 from .models import ScheduleGroup, ScheduleItem, ScheduleConflict, SchoolYear
-from accounts.models import UserProfile
+from accounts.models import UserProfile, StaffProfile
 from colleges.models import College, Program
 from courses.models import Course
 
@@ -31,7 +32,7 @@ class ScheduleItemSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'current_enrollment']
     
     def get_instructor_name(self, obj):
-        if obj.instructor:
+        if obj.instructor and hasattr(obj.instructor, 'user'):
             return obj.instructor.user.email
         return obj.instructor_override or ''
 
@@ -188,3 +189,88 @@ class ConflictCheckSerializer(serializers.Serializer):
         min_length=1,
         max_length=100
     )
+
+
+class CheckRowConflictsSerializer(serializers.Serializer):
+    """Serializer for real-time row-level conflict checking."""
+    
+    schedule_group_id = serializers.UUIDField(required=True)
+    day = serializers.ChoiceField(
+        choices=ScheduleItem.DayOfWeek.choices,
+        required=True
+    )
+    start_time = serializers.TimeField(required=True)
+    end_time = serializers.TimeField(required=True)
+    room = serializers.CharField(max_length=50, required=True)
+    instructor_id = serializers.UUIDField(required=False, allow_null=True)
+    exclude_item_id = serializers.UUIDField(required=False, allow_null=True)
+    
+    def validate(self, data):
+        # Validate schedule group exists
+        try:
+            schedule_group = ScheduleGroup.objects.get(id=data['schedule_group_id'])
+        except ScheduleGroup.DoesNotExist:
+            raise serializers.ValidationError({
+                'schedule_group_id': _('Schedule group not found.')
+            })
+        
+        data['schedule_group'] = schedule_group
+        
+        # Validate instructor exists if provided
+        instructor_id = data.get('instructor_id')
+        if instructor_id:
+            try:
+                instructor = StaffProfile.objects.get(id=instructor_id)
+                data['instructor'] = instructor
+            except StaffProfile.DoesNotExist:
+                raise serializers.ValidationError({
+                    'instructor_id': _('Instructor not found.')
+                })
+        
+        # Validate exclude_item_id if provided
+        exclude_item_id = data.get('exclude_item_id')
+        if exclude_item_id:
+            try:
+                ScheduleItem.objects.get(id=exclude_item_id)
+            except ScheduleItem.DoesNotExist:
+                raise serializers.ValidationError({
+                    'exclude_item_id': _('Schedule item not found.')
+                })
+        
+        # Validate time logic
+        if data['start_time'] >= data['end_time']:
+            raise serializers.ValidationError({
+                'end_time': _('End time must be after start time.')
+            })
+        
+        # Validate duration is reasonable (between 20 minutes and 6 hours)
+        start_minutes = data['start_time'].hour * 60 + data['start_time'].minute
+        end_minutes = data['end_time'].hour * 60 + data['end_time'].minute
+        duration = end_minutes - start_minutes
+        
+        if duration <= 0:
+            raise serializers.ValidationError({
+                'end_time': _('Duration must be positive.')
+            })
+        
+        if duration < 20 or duration > 360:
+            raise serializers.ValidationError({
+                'end_time': _('Duration must be between 20 minutes and 6 hours.')
+            })
+        
+        return data
+    
+    def validate_day(self, value):
+        """Ensure day is valid."""
+        valid_days = [choice[0] for choice in ScheduleItem.DayOfWeek.choices]
+        if value not in valid_days:
+            raise serializers.ValidationError(
+                _('Invalid day. Must be one of: {}').format(', '.join(valid_days))
+            )
+        return value
+    
+    def validate_room(self, value):
+        """Basic room validation."""
+        if not value or len(value.strip()) == 0:
+            raise serializers.ValidationError(_('Room cannot be empty.'))
+        return value.strip()
