@@ -46,3 +46,36 @@ class Program(models.Model):
 
     def __str__(self):
         return f"{self.code} - {self.name}"
+    
+class Instructor(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    full_name = models.CharField(max_length=150)
+
+    # Department = College
+    college = models.ForeignKey(
+        "colleges.College",
+        on_delete=models.PROTECT,
+        related_name="instructors"
+    )
+
+    email = models.EmailField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+
+    # Optional future link to an actual account
+    user_profile = models.OneToOneField(
+        "accounts.UserProfile",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "instructors"
+        ordering = ["full_name"]
+        unique_together = ["full_name", "college"]
+
+    def __str__(self):
+        return self.full_name

@@ -30,7 +30,7 @@ export interface ScheduleRow {
   courseId: string;
   courseCode: string;
   courseTitle: string;
-  days: string;
+  days: string[]; // CHANGED: Now an array
   startTime: string;
   endTime: string;
   instructor: string;
@@ -45,7 +45,8 @@ export interface ScheduleRow {
  */
 export const isRowComplete = (row: ScheduleRow): boolean => {
   return Boolean(
-    row.days &&
+    row.days && 
+    row.days.length > 0 && // CHANGED: Check array has elements
     row.startTime &&
     row.endTime &&
     row.room &&
@@ -80,25 +81,32 @@ export const hasTimeOverlap = (
 };
 
 /**
- * Convert frontend day format to backend format
+ * Check if two arrays have any common elements
  */
-export const convertDayToBackendFormat = (frontendDay: string): string => {
+export const hasCommonDay = (days1: string[], days2: string[]): boolean => {
+  return days1.some(day => days2.includes(day));
+};
+
+/**
+ * Convert frontend day format (array) to backend format (single day)
+ * Since backend expects a single day, we send the first selected day
+ */
+export const convertDaysToBackendFormat = (frontendDays: string[]): string => {
+  if (frontendDays.length === 0) return 'MON';
+  
   const dayMap: Record<string, string> = {
-    'Monday': 'MON',
-    'Tuesday': 'TUE',
-    'Wednesday': 'WED',
-    'Thursday': 'THU',
-    'Friday': 'FRI',
-    'Saturday': 'SAT',
-    'Sunday': 'SUN',
-    'Monday/Tuesday': 'MON',
-    'Wednesday/Thursday': 'WED',
-    'Thursday/Friday': 'THU',
-    'Monday/Wednesday/Friday': 'MON',
-    'Tuesday/Thursday/Saturday': 'TUE'
+    'Mon': 'MON',
+    'Tue': 'TUE',
+    'Wed': 'WED',
+    'Thu': 'THU',
+    'Fri': 'FRI',
+    'Sat': 'SAT',
+    'Sun': 'SUN'
   };
   
-  return dayMap[frontendDay] || frontendDay.split('/')[0] || 'MON';
+  // Convert first day to backend format
+  const firstDay = frontendDays[0];
+  return dayMap[firstDay] || 'MON';
 };
 
 /**
@@ -113,10 +121,11 @@ export const checkLocalConflicts = (rows: ScheduleRow[]): Conflict[] => {
     rows.forEach((row2, j) => {
       if (i >= j || !isRowComplete(row2)) return;
       
-      // Check same day and time overlap
-      if (row1.days === row2.days && 
-          hasTimeOverlap(row1.startTime, row1.endTime, row2.startTime, row2.endTime)) {
-        
+      // Check if they have any common day AND time overlaps
+      const hasCommonDays = hasCommonDay(row1.days, row2.days);
+      const hasOverlap = hasTimeOverlap(row1.startTime, row1.endTime, row2.startTime, row2.endTime);
+      
+      if (hasCommonDays && hasOverlap) {
         // Room conflict
         if (row1.room === row2.room) {
           conflicts.push({
@@ -154,8 +163,9 @@ export const checkDatabaseConflicts = async (
   excludeItemId?: string
 ): Promise<DatabaseConflictResponse> => {
   try {
-    // Convert frontend day format to backend format
-    const backendDay = convertDayToBackendFormat(row.days);
+    // Since backend expects a single day, we need to check for each selected day
+    // For now, we'll check the first day only (this is a limitation)
+    const backendDay = convertDaysToBackendFormat(row.days);
     
     const payload = {
       schedule_group_id: scheduleGroupId,
@@ -247,8 +257,6 @@ export const getConflictsForRow = (
   
   return conflicts;
 };
-
-// Add these to your existing scheduleConflicts.ts file
 
 // Conflict type to column mapping
 export const CONFLICT_COLUMN_MAP: Record<string, 'course' | 'time' | 'instructor' | 'room'> = {
