@@ -17,29 +17,38 @@ export function TimeSelector({ value, onChange, error }: TimeSelectorProps) {
   const generateTimeSlots = () => {
     const slots: string[] = [];
     
-    const toTimeString = (hour: number): string => {
-      const h = hour % 12 || 12;
-      const suffix = hour < 12 ? 'AM' : 'PM';
-      return `${h}:00 ${suffix}`;
+    const startMinutes = 8 * 60;   // 8:00 AM
+    const endMinutes = 20 * 60 + 40; // 8:40 PM
+    const step = 20; // 20-minute increments
+    
+    const toTimeString = (totalMinutes: number) => {
+      const hour24 = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      
+      const hour12 = hour24 % 12 || 12;
+      const suffix = hour24 < 12 ? 'AM' : 'PM';
+      
+      return `${hour12}:${minutes.toString().padStart(2, '0')} ${suffix}`;
     };
     
-    // Generate from 8 AM to 8 PM
-    for (let hour = 8; hour <= 20; hour++) {
-      for (let duration = 1; duration <= 4; duration++) {
-        const endHour = hour + duration;
-        if (endHour > 21) continue;
-        
-        // Skip lunch hour (12 PM - 1 PM)
-        if (hour < 12 && endHour > 12) continue;
-        
-        slots.push(`${toTimeString(hour)} - ${toTimeString(endHour)}`);
-      }
+    for (let t = startMinutes; t <= endMinutes; t += step) {
+      slots.push(toTimeString(t));
     }
     
     return slots;
   };
   
   const timeSlots = generateTimeSlots();
+  
+  // Group slots by AM/PM
+  const groupedSlots = timeSlots.reduce((groups, slot) => {
+    const period = slot.includes('AM') ? 'AM' : 'PM';
+    if (!groups[period]) {
+      groups[period] = [];
+    }
+    groups[period].push(slot);
+    return groups;
+  }, {} as Record<string, string[]>);
   
   return (
     <div className="relative">
@@ -68,22 +77,58 @@ export function TimeSelector({ value, onChange, error }: TimeSelectorProps) {
           exit={{ opacity: 0, y: -10 }}
           className="absolute z-10 mt-1 w-full rounded-lg border border-gray-300 bg-white shadow-lg max-h-60 overflow-y-auto"
         >
-          <div className="p-2 space-y-1">
-            {timeSlots.map((slot) => (
-              <button
-                key={slot}
-                type="button"
-                onClick={() => {
-                  onChange(slot);
-                  setIsOpen(false);
-                }}
-                className={`w-full text-left px-3 py-2 rounded hover:bg-blue-50 hover:text-blue-600 ${
-                  value === slot ? 'bg-blue-100 text-blue-600' : 'text-gray-700'
-                }`}
-              >
-                {slot}
-              </button>
-            ))}
+          <div className="p-2 space-y-4">
+            {/* AM Section */}
+            {groupedSlots.AM && (
+              <div>
+                <div className="px-3 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50 rounded">
+                  Morning
+                </div>
+                <div className="mt-1 space-y-1">
+                  {groupedSlots.AM.map((slot) => (
+                    <button
+                      key={slot}
+                      type="button"
+                      onClick={() => {
+                        onChange(slot);
+                        setIsOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 rounded hover:bg-blue-50 hover:text-blue-600 ${
+                        value === slot ? 'bg-blue-100 text-blue-600' : 'text-gray-700'
+                      }`}
+                    >
+                      {slot}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {/* PM Section */}
+            {groupedSlots.PM && (
+              <div>
+                <div className="px-3 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wider bg-gray-50 rounded">
+                  Afternoon & Evening
+                </div>
+                <div className="mt-1 space-y-1">
+                  {groupedSlots.PM.map((slot) => (
+                    <button
+                      key={slot}
+                      type="button"
+                      onClick={() => {
+                        onChange(slot);
+                        setIsOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 rounded hover:bg-blue-50 hover:text-blue-600 ${
+                        value === slot ? 'bg-blue-100 text-blue-600' : 'text-gray-700'
+                      }`}
+                    >
+                      {slot}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </motion.div>
       )}

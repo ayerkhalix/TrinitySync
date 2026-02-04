@@ -1,12 +1,12 @@
 // app/admin/create-schedule/page.tsx
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
   ArrowLeft, Save, Clock, CalendarDays, User, 
   Building, BookOpen, AlertCircle, CheckCircle,
-  Filter, Plus, Trash2, ChevronDown, XCircle,
+  Filter, Plus, Trash2, ChevronDown,
   AlertTriangle, Info, Loader2
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
@@ -22,13 +22,15 @@ import {
   hasCriticalConflicts as hasRowCriticalConflicts,
   Conflict
 } from '@/lib/utils/scheduleConflicts';
+import { DaySelector } from './components/day-selector';
 
+// =================== STEP 1: UPDATE DATA MODEL ===================
 interface ScheduleRow {
   id: number;
   courseId: string;
   courseCode: string;
   courseTitle: string;
-  days: string;
+  days: string[]; // CHANGED FROM string TO string[]
   startTime: string;
   endTime: string;
   instructor: string;
@@ -68,6 +70,22 @@ const yearLevelOptions = [
   { value: 'fourth_year', label: 'Fourth Year' },
 ];
 
+// ✅ STEP 1: Add duration formatting helper
+const formatDuration = (totalMinutes: number) => {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours > 0 && minutes > 0) {
+    return `${hours} hr${hours > 1 ? 's' : ''} ${minutes} min${minutes > 1 ? 's' : ''}`;
+  }
+
+  if (hours > 0) {
+    return `${hours} hr${hours > 1 ? 's' : ''}`;
+  }
+
+  return `${minutes} min${minutes > 1 ? 's' : ''}`;
+};
+
 export default function CreateSchedulePage() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -80,13 +98,14 @@ export default function CreateSchedulePage() {
   const [instructorOptions, setInstructorOptions] = useState<string[]>([]);
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
   
+  // =================== STEP 2: UPDATE INITIAL STATE ===================
   const [scheduleRows, setScheduleRows] = useState<ScheduleRow[]>([
     {
       id: 1,
       courseId: '',
       courseCode: '',
       courseTitle: '',
-      days: '',
+      days: [], // CHANGED FROM '' TO []
       startTime: '',
       endTime: '',
       instructor: '',
@@ -97,33 +116,31 @@ export default function CreateSchedulePage() {
     }
   ]);
 
-  const daysOptions = [
-    'Monday',
-    'Tuesday',
-    'Wednesday',
-    'Thursday',
-    'Friday',
-    'Saturday',
-    'Monday/Tuesday',
-    'Wednesday/Thursday',
-    'Thursday/Friday',
-    'Monday/Wednesday/Friday',
-    'Tuesday/Thursday/Saturday'
-  ];
+  // =================== STEP 3: REMOVE OLD daysOptions ===================
+  // DELETED: const daysOptions = [...]
 
   const roomOptions = [
     'TC', 'CL2', 'MF201', 'MF202', 'MF203', 'MF204', 'MF205', 'MF206', 'Blended', 'Online'
   ];
 
-  const timeOptions = Array.from({ length: 48 }, (_, i) => {
-    const hour = Math.floor(i / 2);
-    const minute = (i % 2) * 30;
-    const ampm = hour >= 12 ? 'PM' : 'AM';
-    const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-    const timeString = `${displayHour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')} ${ampm}`;
-    const militaryTime = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-    return { display: timeString, value: militaryTime };
-  });
+  // =================== 20-MINUTE TIME SLOTS ===================
+  const timeOptions = (() => {
+    const slots: Array<{ display: string, value: string }> = [];
+    const startMinutes = 8 * 60;   // 8:00 AM
+    const endMinutes = 20 * 60 + 40; // 8:40 PM (20:40 in 24-hour format)
+    
+    for (let totalMinutes = startMinutes; totalMinutes <= endMinutes; totalMinutes += 20) {
+      const hour24 = Math.floor(totalMinutes / 60);
+      const minute = totalMinutes % 60;
+      const suffix = hour24 < 12 ? 'AM' : 'PM';
+      const hour12 = hour24 % 12 || 12;
+      const display = `${hour12}:${minute.toString().padStart(2, '0')} ${suffix}`;
+      const value = `${hour24.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+      slots.push({ display, value });
+    }
+    
+    return slots;
+  })();
 
   // Use the conflict detection hook
   const {
@@ -239,7 +256,7 @@ export default function CreateSchedulePage() {
       courseId: '',
       courseCode: '',
       courseTitle: '',
-      days: '',
+      days: [], // CHANGED FROM '' TO []
       startTime: '',
       endTime: '',
       instructor: '',
@@ -260,13 +277,18 @@ export default function CreateSchedulePage() {
     }
   };
 
-  const updateRow = (id: number, field: keyof ScheduleRow, value: string) => {
+  // =================== STEP 7: UPDATE updateRow TO SUPPORT ARRAYS ===================
+  const updateRow = (
+    id: number,
+    field: keyof ScheduleRow,
+    value: string | string[]
+  ) => {
     const newRows = scheduleRows.map(row => {
       if (row.id === id) {
         const updatedRow = { ...row, [field]: value };
         
         // When courseCode changes, find the course and update all fields
-        if (field === 'courseCode' && value) {
+        if (field === 'courseCode' && typeof value === 'string') {
           const selectedCourse = courseOptions.find(course => course.course_code === value);
           if (selectedCourse) {
             // Validate that the selected course matches the filters
@@ -311,7 +333,8 @@ export default function CreateSchedulePage() {
   const validateForm = () => {
     let isValid = true;
     scheduleRows.forEach(row => {
-      if (!row.courseCode || !row.days || !row.startTime || !row.endTime || !row.instructor || !row.room) {
+      // =================== STEP 8: UPDATE VALIDATION LOGIC ===================
+      if (!row.courseCode || row.days.length === 0 || !row.startTime || !row.endTime || !row.instructor || !row.room) {
         isValid = false;
       }
       // Validate time logic
@@ -321,9 +344,13 @@ export default function CreateSchedulePage() {
         if (start >= end) {
           isValid = false;
         }
-        // Validate duration is in 20 or 40 minute increments
+        // Validate duration is in 20 minute increments
         const duration = end - start;
-        if (duration % 20 !== 0 || duration % 40 === 0) {
+        if (duration % 20 !== 0) {
+          isValid = false;
+        }
+        // Optional: You might want to ensure minimum/maximum duration
+        if (duration < 20 || duration > 240) { // 20 min to 4 hours
           isValid = false;
         }
       }
@@ -348,7 +375,7 @@ export default function CreateSchedulePage() {
     setIsSubmitting(true);
     
     if (!validateForm()) {
-      alert('Please fill in all required fields and ensure time durations are valid (20 or 40 minute increments)');
+      alert('Please fill in all required fields and ensure time durations are valid (20 minute increments)');
       setIsSubmitting(false);
       return;
     }
@@ -359,7 +386,8 @@ export default function CreateSchedulePage() {
         course_id: row.courseId,
         course_code: row.courseCode,
         course_title: row.courseTitle,
-        days: row.days,
+        // =================== STEP 9: BACKEND PAYLOAD ADJUSTMENT ===================
+        days: row.days.join(','), // Convert array to comma-separated string
         start_time: row.startTime,
         end_time: row.endTime,
         instructor: row.instructor,
@@ -651,7 +679,7 @@ export default function CreateSchedulePage() {
           transition={{ delay: 0.2 }}
         >
           <Card>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto overflow-y-visible">
               <table className="min-w-full divide-y divide-border">
                 <thead className="bg-accent/30">
                   <tr>
@@ -693,7 +721,7 @@ export default function CreateSchedulePage() {
                         style={rowStyle}
                       >
                         {/* Course Code */}
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-6 py-4 whitespace-nowrap relative overflow-visible">
                           <div className="relative">
                             <select
                               value={row.courseCode}
@@ -734,25 +762,13 @@ export default function CreateSchedulePage() {
                           />
                         </td>
                         
-                        {/* Days */}
+                        {/* =================== STEP 6: DAYS COLUMN =================== */}
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="relative">
-                            <select
-                              value={row.days}
-                              onChange={(e) => updateRow(row.id, 'days', e.target.value)}
-                              className={`w-full rounded-lg border ${
-                                conflicts.some(c => c.type === 'time' || c.type === 'section') 
-                                  ? 'border-red-300' 
-                                  : 'border-border'
-                              } bg-card text-foreground px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20`}
-                            >
-                              <option value="">Select Days</option>
-                              {daysOptions.map(day => (
-                                <option key={day} value={day}>{day}</option>
-                              ))}
-                            </select>
-                            <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                          </div>
+                          <DaySelector
+                            value={row.days}
+                            onChange={(days) => updateRow(row.id, 'days', days)}
+                            error={conflicts.some(c => c.type === 'time' || c.type === 'section')}
+                          />
                         </td>
                         
                         {/* Time (Start & End) */}
@@ -798,9 +814,13 @@ export default function CreateSchedulePage() {
                             </div>
                           </div>
                           {row.startTime && row.endTime && (
+                            // ✅ STEP 2: Updated duration display
                             <div className="text-xs text-muted-foreground mt-1">
-                              Duration: {Math.round((convertToMinutes(row.endTime) - convertToMinutes(row.startTime)) / 60)}h 
-                              {(convertToMinutes(row.endTime) - convertToMinutes(row.startTime)) % 60}m
+                              Duration: <span className="font-medium text-foreground">
+                                {formatDuration(
+                                  convertToMinutes(row.endTime) - convertToMinutes(row.startTime)
+                                )}
+                              </span>
                             </div>
                           )}
                         </td>
@@ -855,7 +875,7 @@ export default function CreateSchedulePage() {
                             size="sm"
                             onClick={() => removeRow(row.id)}
                             disabled={scheduleRows.length <= 1}
-                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                            className="text-red-800 hover:text-red-900 hover:bg-red-50 dark:text-red-500 dark:hover:text-red-400 dark:hover:bg-red-500/20"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
