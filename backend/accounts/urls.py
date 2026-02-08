@@ -10,13 +10,14 @@ from . import views
 from .views import (
     UserProfileViewSet, StudentProfileViewSet, StaffProfileViewSet,
     CurrentUserView, ChangePasswordView, EmailTokenObtainPairView,
-    register_user
+    register_user, InstructorViewSet
 )
 
 router = DefaultRouter()
 router.register(r'profiles', UserProfileViewSet, basename='profile')
 router.register(r'students', StudentProfileViewSet, basename='student')
 router.register(r'staff', StaffProfileViewSet, basename='staff')
+router.register(r'instructors', InstructorViewSet, basename='instructor')
 
 urlpatterns = [
     path('', include(router.urls)),
@@ -27,4 +28,5 @@ urlpatterns = [
     path('auth/login/', EmailTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('auth/verify/', TokenVerifyView.as_view(), name='token_verify'),
+
 ]

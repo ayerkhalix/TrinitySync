@@ -13,7 +13,8 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useRouter } from 'next/navigation';
-import { apiFetch, fetchPrograms, fetchCourses, createSchedules } from '@/lib/api';
+import { apiFetch, fetchPrograms, fetchCourses } from '@/lib/api';
+import { ScheduleService, ConflictCheckService } from '@/services/schedule-service';
 import { useScheduleConflicts } from '@/hooks/useScheduleConflicts';
 import { 
   ScheduleRow as ScheduleRowType,
@@ -25,15 +26,20 @@ import {
 import { DaySelector } from './components/day-selector';
 
 // =================== STEP 1: UPDATE DATA MODEL ===================
+interface InstructorOption {
+  id: string;        // UUID
+  full_name: string;
+}
+
 interface ScheduleRow {
   id: number;
-  courseId: string;
+  courseId: string;  // UUID
   courseCode: string;
   courseTitle: string;
-  days: string[]; // CHANGED FROM string TO string[]
+  days: string[];    // Array of days (e.g., ['MON', 'WED'])
   startTime: string;
   endTime: string;
-  instructor: string;
+  instructor: string | null; // UUID or null
   room: string;
   program: string;
   yearLevel: string;
@@ -95,29 +101,29 @@ export default function CreateSchedulePage() {
   const [selectedYearLevel, setSelectedYearLevel] = useState<string>('');
   const [selectedSemester, setSelectedSemester] = useState<string>('');
   const [courseOptions, setCourseOptions] = useState<Course[]>([]);
-  const [instructorOptions, setInstructorOptions] = useState<string[]>([]);
-  const [isLoadingCourses, setIsLoadingCourses] = useState(false);
   
-  // =================== STEP 2: UPDATE INITIAL STATE ===================
+  // =================== STEP 2: UPDATE INSTRUCTOR OPTIONS ===================
+  const [instructorOptions, setInstructorOptions] = useState<InstructorOption[]>([]);
+  const [isLoadingCourses, setIsLoadingCourses] = useState(false);
+  const [isLoadingInstructors, setIsLoadingInstructors] = useState(false);
+  
+  // =================== STEP 3: UPDATE INITIAL STATE ===================
   const [scheduleRows, setScheduleRows] = useState<ScheduleRow[]>([
     {
       id: 1,
       courseId: '',
       courseCode: '',
       courseTitle: '',
-      days: [], // CHANGED FROM '' TO []
+      days: [], // Array of days
       startTime: '',
       endTime: '',
-      instructor: '',
+      instructor: null, // UUID or null
       room: '',
       program: '',
       yearLevel: '',
       semester: '',
     }
   ]);
-
-  // =================== STEP 3: REMOVE OLD daysOptions ===================
-  // DELETED: const daysOptions = [...]
 
   const roomOptions = [
     'TC', 'CL2', 'MF201', 'MF202', 'MF203', 'MF204', 'MF205', 'MF206', 'Blended', 'Online'
@@ -159,20 +165,28 @@ export default function CreateSchedulePage() {
     rows: scheduleRows as ScheduleRowType[]
   });
 
-  // Fetch programs on mount
+  // =================== STEP 4: FETCH INSTRUCTORS FROM API ===================
+  // Fetch programs and instructors on mount
   useEffect(() => {
     loadPrograms();
-    
-    // Mock instructor data (in real app, fetch from API)
-    setInstructorOptions([
-      'Ronilo Gayutin',
-      'Maria Santos',
-      'Juan Dela Cruz',
-      'Ana Reyes',
-      'Carlos Lim',
-      'Elena Torres'
-    ]);
+    loadInstructors();
   }, []);
+
+  // Fetch instructors from API
+  const loadInstructors = async () => {
+    setIsLoadingInstructors(true);
+    try {
+      // Use the new instructor endpoint
+      const data = await apiFetch('/accounts/instructors/');
+      setInstructorOptions(data);
+    } catch (error) {
+      console.error('Error fetching instructors:', error);
+      // Fallback to empty array
+      setInstructorOptions([]);
+    } finally {
+      setIsLoadingInstructors(false);
+    }
+  };
 
   // Fetch courses when program, year level, or semester changes
   useEffect(() => {
@@ -256,10 +270,10 @@ export default function CreateSchedulePage() {
       courseId: '',
       courseCode: '',
       courseTitle: '',
-      days: [], // CHANGED FROM '' TO []
+      days: [], // Array of days
       startTime: '',
       endTime: '',
-      instructor: '',
+      instructor: null, // UUID or null
       room: '',
       program: selectedProgram,
       yearLevel: selectedYearLevel,
@@ -277,11 +291,11 @@ export default function CreateSchedulePage() {
     }
   };
 
-  // =================== STEP 7: UPDATE updateRow TO SUPPORT ARRAYS ===================
+  // =================== STEP 5: UPDATE updateRow TO SUPPORT ARRAYS ===================
   const updateRow = (
     id: number,
     field: keyof ScheduleRow,
-    value: string | string[]
+    value: string | string[] | null
   ) => {
     const newRows = scheduleRows.map(row => {
       if (row.id === id) {
@@ -333,8 +347,9 @@ export default function CreateSchedulePage() {
   const validateForm = () => {
     let isValid = true;
     scheduleRows.forEach(row => {
-      // =================== STEP 8: UPDATE VALIDATION LOGIC ===================
-      if (!row.courseCode || row.days.length === 0 || !row.startTime || !row.endTime || !row.instructor || !row.room) {
+      // =================== STEP 6: UPDATE VALIDATION LOGIC ===================
+      if (!row.courseCode || row.days.length === 0 || !row.startTime || !row.endTime || !row.room) {
+        // Instructor is optional in backend, so we don't require it here
         isValid = false;
       }
       // Validate time logic
@@ -370,6 +385,7 @@ export default function CreateSchedulePage() {
     return hours * 60 + minutes;
   };
 
+  // =================== STEP 7: FIX SUBMIT HANDLER (MOST IMPORTANT) ===================
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -381,30 +397,62 @@ export default function CreateSchedulePage() {
     }
     
     try {
-      // Prepare schedule data for backend
-      const scheduleData = scheduleRows.map(row => ({
-        course_id: row.courseId,
-        course_code: row.courseCode,
-        course_title: row.courseTitle,
-        // =================== STEP 9: BACKEND PAYLOAD ADJUSTMENT ===================
-        days: row.days.join(','), // Convert array to comma-separated string
-        start_time: row.startTime,
-        end_time: row.endTime,
-        instructor: row.instructor,
-        room: row.room,
-        program_id: selectedProgram,
-        year_level: row.yearLevel,
-        semester: row.semester,
-      }));
+      // First, we need to create a schedule group
+      const scheduleGroupResponse = await ScheduleService.groups.create({
+        college: '', // You need to get college from context or user
+        program: selectedProgram,
+        year_level: selectedYearLevel,
+        section: 'A', // Default section, you might want to make this configurable
+        semester: selectedSemester,
+        school_year: '', // You need to get current school year
+        status: 'draft' as const,
+        notes: 'Created from web interface',
+        // created_by and other fields will be set by backend
+      });
       
-      // Save to backend
-      await createSchedules(scheduleData);
+      const scheduleGroupId = scheduleGroupResponse.id;
+      
+      // =================== STEP 8: EXPAND MULTI-DAY SCHEDULES ===================
+      // Prepare schedule items - ONE PER DAY
+      const scheduleItems = scheduleRows.flatMap(row =>
+        row.days.map(day => ({
+          schedule_group: scheduleGroupId,
+          course: row.courseId,
+          day,                       // SINGLE DAY (e.g., 'MON')
+          start_time: row.startTime,
+          end_time: row.endTime,
+          room: row.room,
+          instructor: row.instructor, // UUID or null
+          max_students: 40,
+        }))
+      );
+      
+      // Create schedule items one by one to handle errors gracefully
+      const createdItems = [];
+      const errors = [];
+      
+      for (const itemData of scheduleItems) {
+        try {
+          const item = await ScheduleService.items.create(itemData);
+          createdItems.push(item);
+        } catch (error: any) {
+          errors.push({
+            item: itemData,
+            error: error.message || 'Unknown error'
+          });
+          console.error('Error creating schedule item:', error);
+        }
+      }
+      
+      if (errors.length > 0) {
+        alert(`Created ${createdItems.length} out of ${scheduleItems.length} schedule items. ${errors.length} failed.`);
+      }
       
       setShowSuccess(true);
       
       // Redirect after 2 seconds
       setTimeout(() => {
-        router.push('/admin');
+        router.push('/admin/schedules');
       }, 2000);
     } catch (error: any) {
       alert('Error creating schedule: ' + (error.message || 'Unknown error'));
@@ -486,7 +534,7 @@ export default function CreateSchedulePage() {
                 <div>
                   <h3 className="font-semibold text-foreground mb-1">Schedules Created Successfully!</h3>
                   <p className="text-sm text-muted-foreground">
-                    {scheduleRows.length} schedule(s) added. Redirecting to admin dashboard...
+                    {scheduleRows.length} schedule(s) added. Redirecting to schedules page...
                   </p>
                 </div>
               </div>
@@ -505,7 +553,7 @@ export default function CreateSchedulePage() {
           <Button
             type="button"
             variant="ghost"
-            onClick={() => router.push('/admin')}
+            onClick={() => router.push('/admin/schedules')}
             className="hover:bg-accent/50"
           >
             <ArrowLeft className="h-5 w-5" />
@@ -523,7 +571,7 @@ export default function CreateSchedulePage() {
           <Button 
             type="button"
             variant="outline" 
-            onClick={() => router.push('/admin')}
+            onClick={() => router.push('/admin/schedules')}
             disabled={isSubmitting}
             className="border-border text-foreground hover:bg-accent/50"
           >
@@ -762,7 +810,7 @@ export default function CreateSchedulePage() {
                           />
                         </td>
                         
-                        {/* =================== STEP 6: DAYS COLUMN =================== */}
+                        {/* =================== STEP 9: DAYS COLUMN (USING DaySelector) =================== */}
                         <td className="px-6 py-4 whitespace-nowrap">
                           <DaySelector
                             value={row.days}
@@ -814,7 +862,7 @@ export default function CreateSchedulePage() {
                             </div>
                           </div>
                           {row.startTime && row.endTime && (
-                            // ✅ STEP 2: Updated duration display
+                            // ✅ STEP 10: Updated duration display
                             <div className="text-xs text-muted-foreground mt-1">
                               Duration: <span className="font-medium text-foreground">
                                 {formatDuration(
@@ -825,25 +873,37 @@ export default function CreateSchedulePage() {
                           )}
                         </td>
                         
-                        {/* Instructor */}
+                        {/* =================== STEP 11: INSTRUCTOR COLUMN (UUID-based) =================== */}
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="relative">
                             <select
-                              value={row.instructor}
-                              onChange={(e) => updateRow(row.id, 'instructor', e.target.value)}
+                              value={row.instructor || ''}
+                              onChange={(e) => updateRow(row.id, 'instructor', e.target.value || null)}
                               className={`w-full rounded-lg border ${
                                 conflicts.some(c => c.type === 'instructor') 
                                   ? 'border-red-300' 
                                   : 'border-border'
                               } bg-card text-foreground px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20`}
+                              disabled={isLoadingInstructors}
                             >
                               <option value="">Select Instructor</option>
-                              {instructorOptions.map(instructor => (
-                                <option key={instructor} value={instructor}>{instructor}</option>
-                              ))}
+                              {isLoadingInstructors ? (
+                                <option disabled>Loading instructors...</option>
+                              ) : (
+                                instructorOptions.map(instructor => (
+                                  <option key={instructor.id} value={instructor.id}>
+                                    {instructor.full_name}
+                                  </option>
+                                ))
+                              )}
                             </select>
                             <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                           </div>
+                          {isLoadingInstructors && (
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              Loading instructors...
+                            </div>
+                          )}
                         </td>
                         
                         {/* Room */}
@@ -911,7 +971,7 @@ export default function CreateSchedulePage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => router.push('/admin')}
+                onClick={() => router.push('/admin/schedules')}
                 disabled={isSubmitting}
                 className="border-border text-foreground hover:bg-accent/50 w-full sm:w-auto"
               >
@@ -994,8 +1054,15 @@ export default function CreateSchedulePage() {
               <li className="flex items-start gap-3 p-3 rounded-lg bg-accent/10">
                 <CheckCircle className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
                 <div>
-                  <span className="font-medium text-foreground">All fields are required</span>
+                  <span className="font-medium text-foreground">All fields except instructor are required</span>
                   <span className="text-muted-foreground"> for schedule creation</span>
+                </div>
+              </li>
+              <li className="flex items-start gap-3 p-3 rounded-lg bg-accent/10">
+                <CheckCircle className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                <div>
+                  <span className="font-medium text-foreground">Multi-day courses</span>
+                  <span className="text-muted-foreground"> will create separate schedule items for each selected day</span>
                 </div>
               </li>
             </ul>

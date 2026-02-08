@@ -1,4 +1,3 @@
-# accounts/serializers.py
 """
 Serializers for the accounts app.
 """
@@ -9,7 +8,7 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 
 from .models import UserProfile, StudentProfile, StaffProfile, UserRole
-from colleges.models import College, Program
+from colleges.models import College, Program, Instructor
 
 
 User = get_user_model()
@@ -69,6 +68,24 @@ class StaffProfileSerializer(serializers.ModelSerializer):
             'office_hours', 'expertise', 'college_name'
         ]
         read_only_fields = ['id', 'user']
+
+
+class InstructorSerializer(serializers.ModelSerializer):
+    """Read-only serializer for instructors (used in scheduling)."""
+    college_id = serializers.UUIDField(source='college.id', read_only=True)
+    college_code = serializers.CharField(source='college.code', read_only=True)
+    college_name = serializers.CharField(source='college.name', read_only=True)
+
+    class Meta:
+        model = Instructor
+        fields = [
+            'id',
+            'full_name',
+            'college_id',
+            'college_code',
+            'college_name',
+            'is_active',
+        ]
 
 
 class UserRegistrationSerializer(serializers.Serializer):

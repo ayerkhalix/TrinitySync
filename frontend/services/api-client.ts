@@ -9,10 +9,29 @@ const apiClient = axios.create({
   },
 });
 
-// Request interceptor to add auth token
+// Request interceptor to add auth token and validate payloads
 apiClient.interceptors.request.use(
   async (config) => {
     const token = AuthService.getAccessToken();
+    
+    // Validate payload to prevent legacy field usage
+    if (config.data) {
+      // Warn if using legacy instructor_name field
+      if (config.data.instructor_name) {
+        console.warn('❌ DEPRECATED: instructor_name should not be in payload. Use instructor (UUID) instead.');
+        delete config.data.instructor_name;
+      }
+      
+      // Warn if using numeric IDs instead of UUIDs
+      if (typeof config.data.instructor_id === 'number') {
+        console.warn('❌ DEPRECATED: instructor_id should be UUID string, not number.');
+      }
+      
+      // Ensure instructor field is either UUID string or null
+      if (config.data.instructor && typeof config.data.instructor !== 'string') {
+        console.warn('❌ ERROR: instructor must be UUID string or null, got:', typeof config.data.instructor);
+      }
+    }
     
     // If token is expired, try to refresh it
     if (token && AuthService.isTokenExpired()) {
