@@ -28,6 +28,16 @@ class AuthService {
     }
 
     const authData: AuthResponse = await response.json();
+
+    // Store tokens in localStorage (already existing)
+    this.setTokens(authData.access, authData.refresh);
+    this.setCurrentUser(authData.user);
+
+    // ✅ ADD THIS — store access token in cookie for middleware
+    document.cookie = `access_token=${authData.access}; path=/; SameSite=Lax`;
+
+    return authData.user;
+
     
     // Store tokens and user data
     this.setTokens(authData.access, authData.refresh);
@@ -65,7 +75,6 @@ class AuthService {
 
   // Logout
   static async logout(): Promise<void> {
-    // If you have a logout endpoint in Django, call it here
     try {
       await fetch(`${API_BASE_URL}/accounts/auth/logout/`, {
         method: 'POST',
@@ -74,11 +83,15 @@ class AuthService {
     } catch (error) {
       console.warn('Logout API call failed:', error);
     }
-    
-    // Clear local storage regardless
+
+    // ✅ clear cookie for middleware
+    document.cookie = 'access_token=; Max-Age=0; path=/;';
+
+    // clear local storage
     this.clearTokens();
     this.clearCurrentUser();
   }
+
 
   // Get current user from localStorage
   static getCurrentUser(): User | null {

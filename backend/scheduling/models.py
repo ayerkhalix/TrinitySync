@@ -112,11 +112,13 @@ class ScheduleItem(models.Model):
     room = models.CharField(max_length=50)
 
     instructor = models.ForeignKey(
-        "accounts.StaffProfile",
+        "colleges.Instructor",
         on_delete=models.SET_NULL,
         null=True,
-        blank=True
+        blank=True,
+        related_name="schedule_items"
     )
+
 
     instructor_override = models.CharField(max_length=100, blank=True)
     max_students = models.PositiveIntegerField(default=40)

@@ -1,4 +1,3 @@
-# accounts/views.py
 """
 API views for the accounts app.
 """
@@ -9,14 +8,16 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.views import APIView
 from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
+from rest_framework.exceptions import PermissionDenied
 
 from .models import UserProfile, StudentProfile, StaffProfile, UserRole
 from .serializers import (
     UserProfileSerializer, UserProfileDetailSerializer, StudentProfileSerializer, 
-    StaffProfileSerializer, UserRegistrationSerializer,
+    StaffProfileSerializer, UserRegistrationSerializer, InstructorSerializer,
     ChangePasswordSerializer, EmailTokenObtainPairSerializer
 )
 from .permissions import IsCollegeAdmin, IsSuperAdmin, IsProfileOwner, IsStudent
+from colleges.models import Instructor
 from activity_logs.models import ActivityLog
 
 User = get_user_model()
@@ -261,6 +262,35 @@ class StaffProfileViewSet(viewsets.ModelViewSet):
         
 
         return queryset.none()
+
+
+class InstructorViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    API endpoint for listing instructors.
+    - Super Admin: all instructors
+    - College Admin: instructors from their college only
+    """
+    serializer_class = InstructorSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user_profile = self.request.user.profile
+
+        # Super Admin → all instructors
+        if user_profile.role == UserRole.SUPER_ADMIN:
+            return Instructor.objects.filter(is_active=True).select_related('college')
+
+        # College Admin → instructors from their college
+        if user_profile.role == UserRole.COLLEGE_ADMIN:
+            staff = getattr(user_profile, 'staff_profile', None)
+            if staff and staff.college:
+                return Instructor.objects.filter(
+                    college=staff.college,
+                    is_active=True
+                ).select_related('college')
+
+        # Everyone else → forbidden
+        raise PermissionDenied("You do not have permission to view instructors.")
 
 
 class CurrentUserView(APIView):

@@ -4,8 +4,8 @@ Serializers for the scheduling app.
 from rest_framework import serializers
 from django.utils.translation import gettext_lazy as _
 from .models import ScheduleGroup, ScheduleItem, ScheduleConflict, SchoolYear
-from accounts.models import UserProfile, StaffProfile
-from colleges.models import College, Program
+from accounts.models import UserProfile
+from colleges.models import College, Program, Instructor
 from courses.models import Course
 
 
@@ -19,22 +19,25 @@ class SchoolYearSerializer(serializers.ModelSerializer):
 class ScheduleItemSerializer(serializers.ModelSerializer):
     course_code = serializers.CharField(source='course.course_code', read_only=True)
     course_title = serializers.CharField(source='course.course_title', read_only=True)
-    instructor_name = serializers.SerializerMethodField()
+    
+    instructor_id = serializers.UUIDField(source='instructor.id', read_only=True)
+    instructor_name = serializers.CharField(source='instructor.full_name', read_only=True)
     
     class Meta:
         model = ScheduleItem
         fields = [
-            'id', 'schedule_group', 'course', 'course_code', 'course_title',
-            'day', 'start_time', 'end_time', 'room', 'instructor', 'instructor_name',
-            'instructor_override', 'max_students', 'current_enrollment',
+            'id', 'schedule_group', 'course',
+            'course_code', 'course_title',
+            'day', 'start_time', 'end_time',
+            'room',
+            'instructor',        # UUID input
+            'instructor_id',     # UUID output
+            'instructor_name',   # display name
+            'instructor_override',
+            'max_students', 'current_enrollment',
             'is_lab', 'is_online', 'online_link', 'metadata'
         ]
         read_only_fields = ['id', 'current_enrollment']
-    
-    def get_instructor_name(self, obj):
-        if obj.instructor and hasattr(obj.instructor, 'user'):
-            return obj.instructor.user.email
-        return obj.instructor_override or ''
 
 
 class ScheduleGroupSerializer(serializers.ModelSerializer):
@@ -220,9 +223,9 @@ class CheckRowConflictsSerializer(serializers.Serializer):
         instructor_id = data.get('instructor_id')
         if instructor_id:
             try:
-                instructor = StaffProfile.objects.get(id=instructor_id)
+                instructor = Instructor.objects.get(id=instructor_id)
                 data['instructor'] = instructor
-            except StaffProfile.DoesNotExist:
+            except Instructor.DoesNotExist:
                 raise serializers.ValidationError({
                     'instructor_id': _('Instructor not found.')
                 })
