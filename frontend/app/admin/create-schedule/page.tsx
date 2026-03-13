@@ -1158,7 +1158,7 @@ export default function CreateSchedulePage() {
                 <div className="flex items-start gap-3 p-3 rounded-lg bg-emerald-50 border border-emerald-200">
                   <CheckCircle className="h-4 w-4 text-emerald-600 mt-0.5 flex-shrink-0" />
                   <div className="text-sm text-emerald-700">
-                    No conflicts detected. All rows appear to be conflict-free.
+                    No conflicts detected. All rows appear to be conflict-frees.
                   </div>
                 </div>
               )}
