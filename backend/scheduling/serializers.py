@@ -19,6 +19,7 @@ class SchoolYearSerializer(serializers.ModelSerializer):
 class ScheduleItemSerializer(serializers.ModelSerializer):
     course_code = serializers.CharField(source='course.course_code', read_only=True)
     course_title = serializers.CharField(source='course.course_title', read_only=True)
+    course_units = serializers.IntegerField(source='course.units', read_only=True)
     
     instructor_id = serializers.UUIDField(source='instructor.id', read_only=True)
     instructor_name = serializers.CharField(source='instructor.full_name', read_only=True)
@@ -27,7 +28,7 @@ class ScheduleItemSerializer(serializers.ModelSerializer):
         model = ScheduleItem
         fields = [
             'id', 'schedule_group', 'course',
-            'course_code', 'course_title',
+            'course_code', 'course_title', 'course_units',
             'day', 'start_time', 'end_time',
             'room',
             'instructor',        # UUID input

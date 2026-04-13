@@ -1,1088 +1,533 @@
-// app/admin/view-schedules/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  Search, Filter, Calendar, Printer, Eye, 
-  Download, ChevronDown, ChevronUp, Clock,
-  Building, Users, BookOpen, FileText,
-  X, RefreshCw, CheckCircle, AlertCircle,
-  CalendarDays, GraduationCap, Layers,
-  ChevronRight, Grid, Table, List,
-  ArrowLeft, CheckSquare, Square,
-  Maximize2
+import {
+  AlertCircle,
+  ArrowLeft,
+  Calendar,
+  CheckCircle,
+  ChevronRight,
+  Clock,
+  Download,
+  Eye,
+  GraduationCap,
+  Grid,
+  List,
+  Printer,
+  RefreshCw,
+  Search,
+  Trash2,
+  ShieldCheck,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useRouter } from 'next/navigation';
+import { ScheduleService, type ScheduleGroup, type ScheduleItem } from '@/services/schedule-service';
 
-interface CourseSchedule {
-  id: number;
-  program: string;
-  year_level: string;
-  section: string;
-  semester: string;
-  academic_year: string;
-  schedule_table: ScheduleItem[];
-  status: 'active' | 'pending' | 'draft';
-  created_at: string;
-  updated_at: string;
+const DAY_OPTIONS = [
+  { code: 'MON', label: 'Monday' },
+  { code: 'TUE', label: 'Tuesday' },
+  { code: 'WED', label: 'Wednesday' },
+  { code: 'THU', label: 'Thursday' },
+  { code: 'FRI', label: 'Friday' },
+  { code: 'SAT', label: 'Saturday' },
+  { code: 'SUN', label: 'Sunday' },
+] as const;
+
+const STATUS_ORDER = ['draft', 'pending', 'approved', 'active', 'archived', 'cancelled'] as const;
+
+const formatYearLevel = (value: string) =>
+  value
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+
+const formatSemester = (value: string) =>
+  value
+    .split('_')
+    .map((part) => (part === 'sem' ? 'Semester' : part.charAt(0).toUpperCase() + part.slice(1)))
+    .join(' ');
+
+const formatStatus = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
+
+const statusClasses: Record<string, string> = {
+  draft: 'border-blue-500/20 bg-blue-500/10 text-blue-600 dark:text-blue-400',
+  pending: 'border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  approved: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  active: 'border-green-500/20 bg-green-500/10 text-green-600 dark:text-green-400',
+  archived: 'border-slate-500/20 bg-slate-500/10 text-slate-600 dark:text-slate-400',
+  cancelled: 'border-red-500/20 bg-red-500/10 text-red-600 dark:text-red-400',
+};
+
+const statusIcons: Record<string, typeof CheckCircle> = {
+  draft: Clock,
+  pending: AlertCircle,
+  approved: ShieldCheck,
+  active: CheckCircle,
+  archived: Calendar,
+  cancelled: AlertCircle,
+};
+
+function getItemTimeLabel(item: ScheduleItem) {
+  return `${ScheduleService.helper.formatTime(item.start_time)} - ${ScheduleService.helper.formatTime(item.end_time)}`;
 }
 
-interface ScheduleItem {
-  id: number;
-  subject_code: string;
-  subject_name: string;
-  units: number;
-  days: string;
-  time_slot: string;
-  instructor: string;
-  room: string;
-  type: 'lecture' | 'laboratory' | 'blended';
+function getSlotKey(item: ScheduleItem) {
+  return `${item.start_time}-${item.end_time}`;
+}
+
+function getItemMode(item: ScheduleItem) {
+  if (item.is_online) return 'Online';
+  if (item.is_lab) return 'Laboratory';
+  return 'Lecture';
 }
 
 export default function ViewSchedulesPage() {
   const router = useRouter();
-  const [courses, setCourses] = useState<CourseSchedule[]>([]);
-  const [filteredCourses, setFilteredCourses] = useState<CourseSchedule[]>([]);
-  const [selectedCourse, setSelectedCourse] = useState<CourseSchedule | null>(null);
+  const [schedules, setSchedules] = useState<ScheduleGroup[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
-  
-  // Filter states
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedProgram, setSelectedProgram] = useState<string>('all');
-  const [selectedYearLevel, setSelectedYearLevel] = useState<string>('all');
-  const [selectedSemester, setSelectedSemester] = useState<string>('all');
-  const [selectedStatus, setSelectedStatus] = useState<string>('all');
-  
-  // Dropdown states
-  const [showProgramFilter, setShowProgramFilter] = useState(false);
-  const [showYearFilter, setShowYearFilter] = useState(false);
-  const [showSemesterFilter, setShowSemesterFilter] = useState(false);
-  const [showStatusFilter, setShowStatusFilter] = useState(false);
+  const [selectedProgram, setSelectedProgram] = useState('all');
+  const [selectedYearLevel, setSelectedYearLevel] = useState('all');
+  const [selectedSemester, setSelectedSemester] = useState('all');
+  const [selectedStatus, setSelectedStatus] = useState('all');
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  // Filter options
-  const programOptions = ['all', 'BSIT', 'BSCS', 'BSCE', 'BSME', 'BSN', 'BSA', 'BSED', 'BSPH'];
-  const yearLevelOptions = ['all', 'first_year', 'second_year', 'third_year', 'fourth_year', 'fifth_year'];
-  const semesterOptions = ['all', 'first_sem', 'second_sem', 'summer'];
-  const statusOptions = ['all', 'active', 'pending', 'draft'];
+  const fetchSchedules = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await ScheduleService.groups.getAll();
+      setSchedules(data);
+    } catch (fetchError) {
+      console.error('Failed to fetch schedules:', fetchError);
+      setError('Unable to load schedules from the backend right now.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // Time slots for schedule table
-  const timeSlots = [
-    '7:00 AM - 7:50 AM',
-    '7:50 AM - 8:40 AM',
-    '8:40 AM - 9:30 AM',
-    '9:30 AM - 10:20 AM',
-    '10:20 AM - 11:10 AM',
-    '11:10 AM - 12:00 PM',
-    '12:00 PM - 12:50 PM',
-    '12:50 PM - 1:40 PM',
-    '1:40 PM - 2:30 PM',
-    '2:30 PM - 3:20 PM',
-    '3:20 PM - 4:10 PM',
-    '4:10 PM - 5:00 PM',
-    '5:00 PM - 5:50 PM',
-  ];
-
-  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
-  // Mock data for demonstration
   useEffect(() => {
-    const mockCourses: CourseSchedule[] = [
-      {
-        id: 1,
-        program: 'BSIT',
-        year_level: 'first_year',
-        section: 'BSIT 1A',
-        semester: 'first_sem',
-        academic_year: '2024-2025',
-        status: 'active',
-        created_at: '2024-01-15',
-        updated_at: '2024-01-15',
-        schedule_table: [
-          {
-            id: 101,
-            subject_code: 'GE 101',
-            subject_name: 'Understanding the Self',
-            units: 3,
-            days: 'Monday/Wednesday/Friday',
-            time_slot: '7:00 AM - 7:50 AM',
-            instructor: 'Dr. Maria Santos',
-            room: 'CL2',
-            type: 'lecture'
-          },
-          {
-            id: 102,
-            subject_code: 'GE 102',
-            subject_name: 'Readings in Philippine History',
-            units: 3,
-            days: 'Monday/Wednesday/Friday',
-            time_slot: '7:50 AM - 8:40 AM',
-            instructor: 'Prof. Juan Dela Cruz',
-            room: 'CL2',
-            type: 'lecture'
-          },
-          {
-            id: 103,
-            subject_code: 'IT 101',
-            subject_name: 'Introduction to Computing',
-            units: 3,
-            days: 'Tuesday/Thursday',
-            time_slot: '7:00 AM - 8:30 AM',
-            instructor: 'Ronilo Gayutin',
-            room: 'TC',
-            type: 'lecture'
-          },
-        ]
-      },
-      {
-        id: 2,
-        program: 'BSIT',
-        year_level: 'first_year',
-        section: 'BSIT 1B',
-        semester: 'first_sem',
-        academic_year: '2024-2025',
-        status: 'active',
-        created_at: '2024-01-15',
-        updated_at: '2024-01-15',
-        schedule_table: [
-          {
-            id: 201,
-            subject_code: 'GE 101',
-            subject_name: 'Understanding the Self',
-            units: 3,
-            days: 'Monday/Wednesday/Friday',
-            time_slot: '7:00 AM - 7:50 AM',
-            instructor: 'Dr. Maria Santos',
-            room: 'MF201',
-            type: 'lecture'
-          },
-          {
-            id: 202,
-            subject_code: 'GE 102',
-            subject_name: 'Readings in Philippine History',
-            units: 3,
-            days: 'Monday/Wednesday/Friday',
-            time_slot: '7:50 AM - 8:40 AM',
-            instructor: 'Prof. Juan Dela Cruz',
-            room: 'MF201',
-            type: 'lecture'
-          },
-          {
-            id: 203,
-            subject_code: 'IT 101',
-            subject_name: 'Introduction to Computing',
-            units: 3,
-            days: 'Tuesday/Thursday',
-            time_slot: '8:40 AM - 10:10 AM',
-            instructor: 'Ronilo Gayutin',
-            room: 'TC',
-            type: 'lecture'
-          },
-        ]
-      },
-      {
-        id: 3,
-        program: 'BSIT',
-        year_level: 'second_year',
-        section: 'BSIT 2A',
-        semester: 'second_sem',
-        academic_year: '2024-2025',
-        status: 'active',
-        created_at: '2024-01-16',
-        updated_at: '2024-01-16',
-        schedule_table: [
-          {
-            id: 301,
-            subject_code: 'ITCP 106',
-            subject_name: 'Computer Programming 2',
-            units: 3,
-            days: 'Monday/Wednesday/Friday',
-            time_slot: '8:40 AM - 9:30 AM',
-            instructor: 'Ronilo Gayutin',
-            room: 'TC',
-            type: 'lecture'
-          },
-          {
-            id: 302,
-            subject_code: 'ITDS 108',
-            subject_name: 'Data Structures and Algorithms',
-            units: 3,
-            days: 'Tuesday/Thursday',
-            time_slot: '1:40 PM - 3:10 PM',
-            instructor: 'Maria Santos',
-            room: 'CL2',
-            type: 'lecture'
-          },
-          {
-            id: 303,
-            subject_code: 'ITIM 109',
-            subject_name: 'Information Management',
-            units: 3,
-            days: 'Monday/Wednesday/Friday',
-            time_slot: '10:20 AM - 11:10 AM',
-            instructor: 'Juan Dela Cruz',
-            room: 'MF202',
-            type: 'lecture'
-          },
-        ]
-      },
-      {
-        id: 4,
-        program: 'BSCE',
-        year_level: 'first_year',
-        section: 'BSCE 1A',
-        semester: 'first_sem',
-        academic_year: '2024-2025',
-        status: 'active',
-        created_at: '2024-01-14',
-        updated_at: '2024-01-14',
-        schedule_table: [
-          {
-            id: 401,
-            subject_code: 'CE 101',
-            subject_name: 'Engineering Mechanics',
-            units: 4,
-            days: 'Monday/Wednesday/Friday',
-            time_slot: '7:00 AM - 8:30 AM',
-            instructor: 'Carlos Lim',
-            room: 'MF205',
-            type: 'lecture'
-          },
-          {
-            id: 402,
-            subject_code: 'MATH 101',
-            subject_name: 'Calculus 1',
-            units: 3,
-            days: 'Tuesday/Thursday',
-            time_slot: '7:00 AM - 8:30 AM',
-            instructor: 'Ana Reyes',
-            room: 'MF203',
-            type: 'lecture'
-          },
-        ]
-      },
-      {
-        id: 5,
-        program: 'BSCE',
-        year_level: 'second_year',
-        section: 'BSCE 2B',
-        semester: 'second_sem',
-        academic_year: '2024-2025',
-        status: 'pending',
-        created_at: '2024-01-17',
-        updated_at: '2024-01-17',
-        schedule_table: [
-          {
-            id: 501,
-            subject_code: 'CE 201',
-            subject_name: 'Structural Analysis',
-            units: 4,
-            days: 'Monday/Wednesday/Friday',
-            time_slot: '8:40 AM - 10:10 AM',
-            instructor: 'Michael Tan',
-            room: 'MF206',
-            type: 'lecture'
-          },
-          {
-            id: 502,
-            subject_code: 'CE 202',
-            subject_name: 'Fluid Mechanics',
-            units: 3,
-            days: 'Tuesday/Thursday',
-            time_slot: '10:20 AM - 11:50 AM',
-            instructor: 'Elena Torres',
-            room: 'MF204',
-            type: 'lecture'
-          },
-        ]
-      },
-      {
-        id: 6,
-        program: 'BSN',
-        year_level: 'first_year',
-        section: 'BSN 1A',
-        semester: 'first_sem',
-        academic_year: '2024-2025',
-        status: 'draft',
-        created_at: '2024-01-18',
-        updated_at: '2024-01-18',
-        schedule_table: [
-          {
-            id: 601,
-            subject_code: 'NURS 101',
-            subject_name: 'Anatomy & Physiology',
-            units: 5,
-            days: 'Monday/Tuesday/Wednesday',
-            time_slot: '7:00 AM - 8:30 AM',
-            instructor: 'Dr. Sarah Johnson',
-            room: 'MF207',
-            type: 'lecture'
-          },
-        ]
-      },
-    ];
-
-    setCourses(mockCourses);
-    setFilteredCourses(mockCourses);
-    setLoading(false);
+    void fetchSchedules();
   }, []);
 
-  // Apply filters
-  useEffect(() => {
-    let filtered = [...courses];
+  const filteredSchedules = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
 
-    // Search filter
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      filtered = filtered.filter(course =>
-        course.program.toLowerCase().includes(term) ||
-        course.section.toLowerCase().includes(term) ||
-        course.academic_year.toLowerCase().includes(term)
-      );
+    return schedules.filter((schedule) => {
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        schedule.program_name.toLowerCase().includes(normalizedSearch) ||
+        schedule.section.toLowerCase().includes(normalizedSearch) ||
+        schedule.school_year_name.toLowerCase().includes(normalizedSearch) ||
+        schedule.items.some(
+          (item) =>
+            item.course_code.toLowerCase().includes(normalizedSearch) ||
+            item.course_title.toLowerCase().includes(normalizedSearch) ||
+            item.room.toLowerCase().includes(normalizedSearch) ||
+            (item.instructor_name || '').toLowerCase().includes(normalizedSearch)
+        );
+
+      const matchesProgram = selectedProgram === 'all' || schedule.program_name === selectedProgram;
+      const matchesYear = selectedYearLevel === 'all' || schedule.year_level === selectedYearLevel;
+      const matchesSemester = selectedSemester === 'all' || schedule.semester === selectedSemester;
+      const matchesStatus = selectedStatus === 'all' || schedule.status === selectedStatus;
+
+      return matchesSearch && matchesProgram && matchesYear && matchesSemester && matchesStatus;
+    });
+  }, [schedules, searchTerm, selectedProgram, selectedYearLevel, selectedSemester, selectedStatus]);
+
+  const selectedSchedule = useMemo(
+    () => schedules.find((schedule) => schedule.id === selectedScheduleId) ?? null,
+    [schedules, selectedScheduleId]
+  );
+
+  const programOptions = useMemo(
+    () => ['all', ...new Set(schedules.map((schedule) => schedule.program_name))],
+    [schedules]
+  );
+  const yearLevelOptions = useMemo(
+    () => ['all', ...new Set(schedules.map((schedule) => schedule.year_level))],
+    [schedules]
+  );
+  const semesterOptions = useMemo(
+    () => ['all', ...new Set(schedules.map((schedule) => schedule.semester))],
+    [schedules]
+  );
+  const statusOptions = useMemo(
+    () => ['all', ...STATUS_ORDER.filter((status) => schedules.some((schedule) => schedule.status === status))],
+    [schedules]
+  );
+
+  const timeSlots = useMemo(() => {
+    if (!selectedSchedule) {
+      return [] as Array<{ key: string; label: string }>;
     }
 
-    // Program filter
-    if (selectedProgram !== 'all') {
-      filtered = filtered.filter(course => course.program === selectedProgram);
-    }
+    return Array.from(new Set(selectedSchedule.items.map((item) => getSlotKey(item))))
+      .sort((left, right) => left.localeCompare(right))
+      .map((slot) => {
+        const [start, end] = slot.split('-');
+        return {
+          key: slot,
+          label: `${ScheduleService.helper.formatTime(start)} - ${ScheduleService.helper.formatTime(end)}`,
+        };
+      });
+  }, [selectedSchedule]);
 
-    // Year level filter
-    if (selectedYearLevel !== 'all') {
-      filtered = filtered.filter(course => course.year_level === selectedYearLevel);
-    }
+  const activeFilterCount = [selectedProgram, selectedYearLevel, selectedSemester, selectedStatus]
+    .filter((value) => value !== 'all').length + (searchTerm ? 1 : 0);
 
-    // Semester filter
-    if (selectedSemester !== 'all') {
-      filtered = filtered.filter(course => course.semester === selectedSemester);
-    }
-
-    // Status filter
-    if (selectedStatus !== 'all') {
-      filtered = filtered.filter(course => course.status === selectedStatus);
-    }
-
-    setFilteredCourses(filtered);
-  }, [searchTerm, selectedProgram, selectedYearLevel, selectedSemester, selectedStatus, courses]);
-
-  const handlePrint = () => {
-    if (selectedCourse) {
-      // Print individual course schedule
-      window.print();
-    }
-  };
-
-  const handleExport = () => {
-    if (selectedCourse) {
-      const dataStr = JSON.stringify(selectedCourse, null, 2);
-      const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-      const exportFileDefaultName = `${selectedCourse.program}_${selectedCourse.section}_schedule.json`;
-      
-      const linkElement = document.createElement('a');
-      linkElement.setAttribute('href', dataUri);
-      linkElement.setAttribute('download', exportFileDefaultName);
-      linkElement.click();
-    }
-  };
-
-  const handleResetFilters = () => {
-    setSearchTerm('');
-    setSelectedProgram('all');
-    setSelectedYearLevel('all');
-    setSelectedSemester('all');
-    setSelectedStatus('all');
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active': return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
-      case 'pending': return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
-      case 'draft': return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20';
-      default: return 'bg-muted text-muted-foreground border-border';
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'active': return <CheckCircle className="h-3 w-3" />;
-      case 'pending': return <Clock className="h-3 w-3" />;
-      case 'draft': return <FileText className="h-3 w-3" />;
-      default: return null;
-    }
-  };
-
-  const formatYearLevel = (year: string) => {
-    return year.replace('_', ' ').replace('year', 'Year').toUpperCase();
-  };
-
-  const formatSemester = (semester: string) => {
-    return semester.replace('_', ' ').replace('sem', 'Semester').toUpperCase();
-  };
-
-  const getCellContent = (timeSlot: string, day: string, schedule: ScheduleItem[]) => {
-    const matchingItems = schedule.filter(item => 
-      item.time_slot === timeSlot && item.days.includes(day)
+  const handleDeleteSchedule = async (schedule: ScheduleGroup) => {
+    const confirmed = window.confirm(
+      `Delete ${schedule.program_name} ${schedule.section}? This will remove the schedule group and all of its items.`
     );
 
-    if (matchingItems.length === 0) return null;
+    if (!confirmed) {
+      return;
+    }
 
-    return matchingItems.map(item => (
-      <div key={item.id} className="mb-2 last:mb-0 p-2 rounded bg-primary/5 border border-primary/10">
-        <div className="text-xs font-medium text-foreground">{item.subject_code}</div>
-        <div className="text-xs text-muted-foreground truncate">{item.subject_name}</div>
-        <div className="flex items-center justify-between mt-1">
-          <span className="text-xs text-muted-foreground">{item.instructor}</span>
-          <span className="text-xs px-1.5 py-0.5 rounded bg-accent text-muted-foreground">
-            {item.room}
-          </span>
-        </div>
-      </div>
-    ));
+    setBusyId(schedule.id);
+    try {
+      await ScheduleService.groups.delete(schedule.id);
+      setSchedules((current) => current.filter((item) => item.id !== schedule.id));
+      if (selectedScheduleId === schedule.id) {
+        setSelectedScheduleId(null);
+      }
+    } catch (deleteError) {
+      console.error('Failed to delete schedule:', deleteError);
+      window.alert('Unable to delete this schedule group right now.');
+    } finally {
+      setBusyId(null);
+    }
   };
 
-  const activeFilterCount = [
-    selectedProgram !== 'all',
-    selectedYearLevel !== 'all',
-    selectedSemester !== 'all',
-    selectedStatus !== 'all',
-    searchTerm !== ''
-  ].filter(Boolean).length;
+  const handleApproveSchedule = async (schedule: ScheduleGroup) => {
+    setBusyId(schedule.id);
+    try {
+      await ScheduleService.groups.approve(schedule.id);
+      await fetchSchedules();
+      setSelectedScheduleId(schedule.id);
+    } catch (approveError) {
+      console.error('Failed to approve schedule:', approveError);
+      window.alert('Unable to approve this schedule right now.');
+    } finally {
+      setBusyId(null);
+    }
+  };
 
-  return (
-    <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-      {/* Header */}
+  const handleExport = (schedule: ScheduleGroup) => {
+    const blob = new Blob([JSON.stringify(schedule, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${schedule.program_name}-${schedule.section}-schedule.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const renderStatusBadge = (status: string) => {
+    const Icon = statusIcons[status] || AlertCircle;
+    return (
+      <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium ${statusClasses[status] || statusClasses.draft}`}>
+        <Icon className="h-3.5 w-3.5" />
+        {formatStatus(status)}
+      </span>
+    );
+  };
+
+  const renderScheduleCard = (schedule: ScheduleGroup) => {
+    const totalUnits = schedule.items.reduce((sum, item) => sum + (item.course_units || 0), 0);
+
+    return (
       <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8"
+        key={schedule.id}
+        whileHover={{ y: -4 }}
+        className="rounded-xl border border-border bg-card p-5 shadow-sm transition-all"
       >
-        <div className="flex items-center gap-4">
-          {selectedCourse ? (
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="text-lg font-semibold text-foreground">{schedule.program_name}</span>
+              {renderStatusBadge(schedule.status)}
+            </div>
+            <div className="text-xl font-bold text-foreground">Section {schedule.section}</div>
+            <div className="mt-1 text-sm text-muted-foreground">
+              {formatYearLevel(schedule.year_level)} • {formatSemester(schedule.semester)}
+            </div>
+          </div>
+          <div className="rounded-lg bg-primary/10 p-2 text-primary">
+            <GraduationCap className="h-5 w-5" />
+          </div>
+        </div>
+
+        <div className="mt-5 space-y-2 text-sm text-muted-foreground">
+          <div className="flex items-center justify-between gap-4">
+            <span>School Year</span>
+            <span className="font-medium text-foreground">{schedule.school_year_name}</span>
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <span>Schedule Items</span>
+            <span className="font-medium text-foreground">{schedule.item_count}</span>
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <span>Total Units</span>
+            <span className="font-medium text-foreground">{totalUnits}</span>
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <span>Conflicts</span>
+            <span className={`font-medium ${schedule.conflict_count > 0 ? 'text-destructive' : 'text-foreground'}`}>
+              {schedule.conflict_count}
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-border pt-4">
+          <Button variant="ghost" size="sm" onClick={() => setSelectedScheduleId(schedule.id)}>
+            <Eye className="mr-2 h-4 w-4" />
+            View
+          </Button>
+          {(schedule.status === 'draft' || schedule.status === 'pending') && (
             <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setSelectedCourse(null)}
-              className="hover:bg-accent/50"
+              variant="outline"
+              size="sm"
+              onClick={() => handleApproveSchedule(schedule)}
+              loading={busyId === schedule.id}
             >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => router.push('/admin')}
-              className="hover:bg-accent/50"
-            >
-              <ChevronDown className="h-5 w-5 rotate-90" />
+              <ShieldCheck className="mr-2 h-4 w-4" />
+              Approve
             </Button>
           )}
+          <Button variant="outline" size="sm" onClick={() => handleExport(schedule)}>
+            <Download className="mr-2 h-4 w-4" />
+            Export
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handleDeleteSchedule(schedule)}
+            loading={busyId === schedule.id}
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete
+          </Button>
+        </div>
+      </motion.div>
+    );
+  };
+
+  return (
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" onClick={() => (selectedSchedule ? setSelectedScheduleId(null) : router.push('/admin'))}>
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
           <div>
-            <div className="flex items-center gap-2 mb-2">
+            <div className="mb-2 flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
               <span className="text-sm font-medium text-muted-foreground">
-                {selectedCourse ? 'COURSE SCHEDULE' : 'COURSE MANAGEMENT'}
+                {selectedSchedule ? 'SCHEDULE DETAILS' : 'VIEW SCHEDULES'}
               </span>
             </div>
             <h1 className="text-3xl font-bold text-foreground">
-              {selectedCourse 
-                ? `${selectedCourse.program} - ${selectedCourse.section}`
-                : 'View Course Schedules'
-              }
+              {selectedSchedule ? `${selectedSchedule.program_name} • ${selectedSchedule.section}` : 'Schedule Management'}
             </h1>
             <p className="text-muted-foreground">
-              {selectedCourse 
-                ? `${formatSemester(selectedCourse.semester)} • AY ${selectedCourse.academic_year}`
-                : 'Browse and manage all course schedules'
-              }
+              {selectedSchedule
+                ? `${formatSemester(selectedSchedule.semester)} • ${selectedSchedule.school_year_name}`
+                : 'Browse live schedule groups, review their items, and manage records in the database.'}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          {selectedCourse ? (
+        <div className="flex flex-wrap items-center gap-3">
+          {selectedSchedule ? (
             <>
-              <Button 
-                onClick={() => {/* Preview functionality */}}
-                variant="outline"
-                className="border-border text-foreground hover:bg-accent/50"
-              >
-                <Maximize2 className="h-4 w-4 mr-2" />
-                Preview
+              <Button variant="outline" onClick={() => handleExport(selectedSchedule)}>
+                <Download className="mr-2 h-4 w-4" />
+                Export JSON
               </Button>
-              <Button 
-                onClick={handleExport}
-                variant="outline"
-                className="border-border text-foreground hover:bg-accent/50"
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Export
-              </Button>
-              <Button 
-                onClick={handlePrint}
-                className="bg-primary text-primary-foreground hover:bg-primary/90"
-              >
-                <Printer className="h-4 w-4 mr-2" />
+              <Button variant="outline" onClick={() => window.print()}>
+                <Printer className="mr-2 h-4 w-4" />
                 Print
               </Button>
+              {(selectedSchedule.status === 'draft' || selectedSchedule.status === 'pending') && (
+                <Button loading={busyId === selectedSchedule.id} onClick={() => handleApproveSchedule(selectedSchedule)}>
+                  <ShieldCheck className="mr-2 h-4 w-4" />
+                  Approve Schedule
+                </Button>
+              )}
             </>
           ) : (
-            <div className="flex items-center border border-border rounded-lg p-1">
-              <Button
-                onClick={() => setViewMode('grid')}
-                variant={viewMode === 'grid' ? 'primary' : 'ghost'}
-                size="sm"
-                className={viewMode === 'grid' 
-                  ? 'bg-primary text-primary-foreground' 
-                  : 'text-muted-foreground hover:text-foreground'
-                }
-              >
-                <Grid className="h-4 w-4" />
+            <>
+              <div className="flex items-center rounded-lg border border-border p-1">
+                <Button variant={viewMode === 'grid' ? 'primary' : 'ghost'} size="sm" onClick={() => setViewMode('grid')}>
+                  <Grid className="h-4 w-4" />
+                </Button>
+                <Button variant={viewMode === 'table' ? 'primary' : 'ghost'} size="sm" onClick={() => setViewMode('table')}>
+                  <List className="h-4 w-4" />
+                </Button>
+              </div>
+              <Button variant="outline" onClick={() => void fetchSchedules()}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Refresh
               </Button>
-              <Button
-                onClick={() => setViewMode('table')}
-                variant={viewMode === 'table' ? 'primary' : 'ghost'}
-                size="sm"
-                className={viewMode === 'table' 
-                  ? 'bg-primary text-primary-foreground' 
-                  : 'text-muted-foreground hover:text-foreground'
-                }
-              >
-                <List className="h-4 w-4" />
+              <Button onClick={() => router.push('/admin/create-schedule')}>
+                <Calendar className="mr-2 h-4 w-4" />
+                Create Schedule
               </Button>
-            </div>
+            </>
           )}
         </div>
       </motion.div>
 
-      {/* Back to List */}
-      {selectedCourse && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-6"
-        >
-          <Card className="bg-card border-border p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg ${getStatusColor(selectedCourse.status)}`}>
-                  {getStatusIcon(selectedCourse.status)}
-                </div>
-                <div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-medium text-muted-foreground">Status:</span>
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(selectedCourse.status)}`}>
-                      {getStatusIcon(selectedCourse.status)}
-                      {selectedCourse.status.charAt(0).toUpperCase() + selectedCourse.status.slice(1)}
-                    </span>
-                    <span className="text-sm text-muted-foreground">•</span>
-                    <span className="text-sm text-muted-foreground">
-                      Updated: {new Date(selectedCourse.updated_at).toLocaleDateString()}
-                    </span>
-                  </div>
-                </div>
+      {error && (
+        <Card className="mb-6 border-destructive/30 bg-destructive/5 p-4" hover={false}>
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 h-5 w-5 text-destructive" />
+            <div>
+              <p className="font-medium text-foreground">Schedule data could not be loaded</p>
+              <p className="text-sm text-muted-foreground">{error}</p>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {!selectedSchedule && (
+        <>
+          <Card className="mb-6 p-6" hover={false}>
+            <div className="grid gap-4 lg:grid-cols-[2fr_repeat(4,minmax(0,1fr))]">
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Search program, section, course, room, or instructor"
+                  className="pl-11"
+                />
               </div>
+              <select value={selectedProgram} onChange={(event) => setSelectedProgram(event.target.value)} className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground">
+                {programOptions.map((option) => (
+                  <option key={option} value={option}>{option === 'all' ? 'All programs' : option}</option>
+                ))}
+              </select>
+              <select value={selectedYearLevel} onChange={(event) => setSelectedYearLevel(event.target.value)} className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground">
+                {yearLevelOptions.map((option) => (
+                  <option key={option} value={option}>{option === 'all' ? 'All year levels' : formatYearLevel(option)}</option>
+                ))}
+              </select>
+              <select value={selectedSemester} onChange={(event) => setSelectedSemester(event.target.value)} className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground">
+                {semesterOptions.map((option) => (
+                  <option key={option} value={option}>{option === 'all' ? 'All semesters' : formatSemester(option)}</option>
+                ))}
+              </select>
+              <select value={selectedStatus} onChange={(event) => setSelectedStatus(event.target.value)} className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground">
+                {statusOptions.map((option) => (
+                  <option key={option} value={option}>{option === 'all' ? 'All statuses' : formatStatus(option)}</option>
+                ))}
+              </select>
               <Button
                 variant="outline"
-                size="sm"
-                onClick={() => setSelectedCourse(null)}
-                className="border-border text-foreground hover:bg-accent/50"
+                onClick={() => {
+                  setSearchTerm('');
+                  setSelectedProgram('all');
+                  setSelectedYearLevel('all');
+                  setSelectedSemester('all');
+                  setSelectedStatus('all');
+                }}
               >
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to Courses
+                Reset {activeFilterCount > 0 ? `(${activeFilterCount})` : ''}
               </Button>
             </div>
           </Card>
-        </motion.div>
-      )}
 
-      {/* Course List View */}
-      {!selectedCourse && (
-        <>
-          {/* Stats Overview */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
-          >
-            <Card className="bg-card border-border">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Total Courses</p>
-                  <div className="flex items-baseline gap-2 mt-2">
-                    <p className="text-3xl font-bold text-foreground">{courses.length}</p>
-                    <span className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary">
-                      +8%
-                    </span>
-                  </div>
-                </div>
-                <div className="p-3 rounded-lg bg-primary/10 text-primary">
-                  <GraduationCap className="h-6 w-6" />
-                </div>
+          <Card className="mb-6 p-6" hover={false}>
+            <div className="grid gap-4 md:grid-cols-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Total schedule groups</p>
+                <p className="mt-1 text-2xl font-bold text-foreground">{schedules.length}</p>
               </div>
-            </Card>
-
-            <Card className="bg-card border-border">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Active</p>
-                  <div className="flex items-baseline gap-2 mt-2">
-                    <p className="text-3xl font-bold text-foreground">
-                      {courses.filter(s => s.status === 'active').length}
-                    </p>
-                  </div>
-                </div>
-                <div className="p-3 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle className="h-6 w-6" />
-                </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Filtered results</p>
+                <p className="mt-1 text-2xl font-bold text-foreground">{filteredSchedules.length}</p>
               </div>
-            </Card>
-
-            <Card className="bg-card border-border">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Pending Review</p>
-                  <div className="flex items-baseline gap-2 mt-2">
-                    <p className="text-3xl font-bold text-foreground">
-                      {courses.filter(s => s.status === 'pending').length}
-                    </p>
-                  </div>
-                </div>
-                <div className="p-3 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                  <Clock className="h-6 w-6" />
-                </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Pending approval</p>
+                <p className="mt-1 text-2xl font-bold text-foreground">
+                  {schedules.filter((schedule) => schedule.status === 'draft' || schedule.status === 'pending').length}
+                </p>
               </div>
-            </Card>
-
-            <Card className="bg-card border-border">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Filtered Results</p>
-                  <div className="flex items-baseline gap-2 mt-2">
-                    <p className="text-3xl font-bold text-foreground">{filteredCourses.length}</p>
-                    <span className="text-xs px-2 py-1 rounded-full bg-accent text-muted-foreground">
-                      {filteredCourses.length > 0 ? ((filteredCourses.length / courses.length) * 100).toFixed(0) : 0}%
-                    </span>
-                  </div>
-                </div>
-                <div className="p-3 rounded-lg bg-accent text-muted-foreground">
-                  <Filter className="h-6 w-6" />
-                </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Open conflicts</p>
+                <p className="mt-1 text-2xl font-bold text-destructive">
+                  {schedules.reduce((sum, schedule) => sum + schedule.conflict_count, 0)}
+                </p>
               </div>
-            </Card>
-          </motion.div>
+            </div>
+          </Card>
 
-          {/* Filter Bar */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="mb-8"
-          >
-            <Card className="bg-card border-border">
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
-                <div>
-                  <h3 className="text-lg font-semibold text-foreground">Filters & Search</h3>
-                  <p className="text-sm text-muted-foreground">Refine course schedules by criteria</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  {activeFilterCount > 0 && (
-                    <Button
-                      onClick={handleResetFilters}
-                      variant="ghost"
-                      size="sm"
-                      className="text-muted-foreground hover:text-foreground hover:bg-accent/50"
-                    >
-                      <X className="h-4 w-4 mr-2" />
-                      Clear Filters ({activeFilterCount})
-                    </Button>
-                  )}
-                  <Button
-                    onClick={() => setLoading(true)}
-                    variant="outline"
-                    size="sm"
-                    className="border-border text-foreground hover:bg-accent/50"
-                  >
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Refresh
-                  </Button>
-                </div>
-              </div>
-
-              {/* Search Input */}
-              <div className="relative mb-6">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <Input
-                  placeholder="Search programs, sections, academic year..."
-                  value={searchTerm}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
-                  className="pl-10 bg-card border-border text-foreground placeholder:text-muted-foreground"
-                />
-              </div>
-
-              {/* Filter Chips */}
-              <div className="flex flex-wrap gap-3">
-                {/* Program Filter */}
-                <div className="relative">
-                  <Button
-                    onClick={() => setShowProgramFilter(!showProgramFilter)}
-                    variant="outline"
-                    size="sm"
-                    className={`flex items-center gap-2 border ${
-                      selectedProgram !== 'all' 
-                        ? 'bg-primary/10 text-primary border-primary/30' 
-                        : 'border-border text-foreground hover:bg-accent/50'
-                    }`}
-                  >
-                    <GraduationCap className="h-4 w-4" />
-                    {selectedProgram === 'all' ? 'All Programs' : selectedProgram}
-                    {showProgramFilter ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </Button>
-                  
-                  {showProgramFilter && (
-                    <div className="absolute top-full left-0 mt-1 z-10 bg-card border border-border rounded-lg shadow-lg min-w-[180px]">
-                      {programOptions.map(option => (
-                        <button
-                          key={option}
-                          onClick={() => {
-                            setSelectedProgram(option);
-                            setShowProgramFilter(false);
-                          }}
-                          className={`w-full text-left px-4 py-2 hover:bg-accent ${
-                            selectedProgram === option 
-                              ? 'bg-primary/10 text-primary' 
-                              : 'text-foreground'
-                          }`}
-                        >
-                          {option === 'all' ? 'All Programs' : option}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Year Level Filter */}
-                <div className="relative">
-                  <Button
-                    onClick={() => setShowYearFilter(!showYearFilter)}
-                    variant="outline"
-                    size="sm"
-                    className={`flex items-center gap-2 border ${
-                      selectedYearLevel !== 'all' 
-                        ? 'bg-primary/10 text-primary border-primary/30' 
-                        : 'border-border text-foreground hover:bg-accent/50'
-                    }`}
-                  >
-                    <Layers className="h-4 w-4" />
-                    {selectedYearLevel === 'all' ? 'All Years' : formatYearLevel(selectedYearLevel)}
-                    {showYearFilter ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </Button>
-                  
-                  {showYearFilter && (
-                    <div className="absolute top-full left-0 mt-1 z-10 bg-card border border-border rounded-lg shadow-lg min-w-[180px]">
-                      {yearLevelOptions.map(option => (
-                        <button
-                          key={option}
-                          onClick={() => {
-                            setSelectedYearLevel(option);
-                            setShowYearFilter(false);
-                          }}
-                          className={`w-full text-left px-4 py-2 hover:bg-accent ${
-                            selectedYearLevel === option 
-                              ? 'bg-primary/10 text-primary' 
-                              : 'text-foreground'
-                          }`}
-                        >
-                          {option === 'all' ? 'All Years' : formatYearLevel(option)}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Semester Filter */}
-                <div className="relative">
-                  <Button
-                    onClick={() => setShowSemesterFilter(!showSemesterFilter)}
-                    variant="outline"
-                    size="sm"
-                    className={`flex items-center gap-2 border ${
-                      selectedSemester !== 'all' 
-                        ? 'bg-primary/10 text-primary border-primary/30' 
-                        : 'border-border text-foreground hover:bg-accent/50'
-                    }`}
-                  >
-                    <CalendarDays className="h-4 w-4" />
-                    {selectedSemester === 'all' ? 'All Semesters' : formatSemester(selectedSemester)}
-                    {showSemesterFilter ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </Button>
-                  
-                  {showSemesterFilter && (
-                    <div className="absolute top-full left-0 mt-1 z-10 bg-card border border-border rounded-lg shadow-lg min-w-[180px]">
-                      {semesterOptions.map(option => (
-                        <button
-                          key={option}
-                          onClick={() => {
-                            setSelectedSemester(option);
-                            setShowSemesterFilter(false);
-                          }}
-                          className={`w-full text-left px-4 py-2 hover:bg-accent ${
-                            selectedSemester === option 
-                              ? 'bg-primary/10 text-primary' 
-                              : 'text-foreground'
-                          }`}
-                        >
-                          {option === 'all' ? 'All Semesters' : formatSemester(option)}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Status Filter */}
-                <div className="relative">
-                  <Button
-                    onClick={() => setShowStatusFilter(!showStatusFilter)}
-                    variant="outline"
-                    size="sm"
-                    className={`flex items-center gap-2 border ${
-                      selectedStatus !== 'all' 
-                        ? 'bg-primary/10 text-primary border-primary/30' 
-                        : 'border-border text-foreground hover:bg-accent/50'
-                    }`}
-                  >
-                    <Clock className="h-4 w-4" />
-                    {selectedStatus === 'all' ? 'All Status' : selectedStatus.charAt(0).toUpperCase() + selectedStatus.slice(1)}
-                    {showStatusFilter ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </Button>
-                  
-                  {showStatusFilter && (
-                    <div className="absolute top-full left-0 mt-1 z-10 bg-card border border-border rounded-lg shadow-lg min-w-[180px]">
-                      {statusOptions.map(option => (
-                        <button
-                          key={option}
-                          onClick={() => {
-                            setSelectedStatus(option);
-                            setShowStatusFilter(false);
-                          }}
-                          className={`w-full text-left px-4 py-2 hover:bg-accent ${
-                            selectedStatus === option 
-                              ? 'bg-primary/10 text-primary' 
-                              : 'text-foreground'
-                          }`}
-                        >
-                          {option === 'all' ? 'All Status' : option.charAt(0).toUpperCase() + option.slice(1)}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Card>
-          </motion.div>
-
-          {/* Courses Grid/Table View */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-          >
-            <Card className="bg-card border-border">
-              <div className="flex items-center justify-between p-6 border-b border-border">
-                <div>
-                  <h3 className="text-lg font-semibold text-foreground">Course Schedules</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {filteredCourses.length} course{filteredCourses.length !== 1 ? 's' : ''} found
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-border text-foreground hover:bg-accent/50"
-                    onClick={() => router.push('/admin/create-schedule')}
-                  >
-                    <Calendar className="h-4 w-4 mr-2" />
-                    Create Schedule
-                  </Button>
-                </div>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+            <Card className="overflow-hidden" hover={false}>
+              <div className="border-b border-border p-6">
+                <h2 className="text-lg font-semibold text-foreground">Live Schedule Groups</h2>
+                <p className="text-sm text-muted-foreground">Viewing records from the scheduling API and database.</p>
               </div>
 
               {loading ? (
                 <div className="p-12 text-center">
-                  <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent"></div>
-                  <p className="mt-4 text-muted-foreground">Loading courses...</p>
+                  <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent" />
+                  <p className="mt-4 text-muted-foreground">Loading schedules...</p>
                 </div>
-              ) : filteredCourses.length === 0 ? (
+              ) : filteredSchedules.length === 0 ? (
                 <div className="p-12 text-center">
-                  <div className="mx-auto h-16 w-16 rounded-full bg-accent flex items-center justify-center mb-4">
-                    <Search className="h-8 w-8 text-muted-foreground" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground mb-2">No courses found</h3>
-                  <p className="text-muted-foreground mb-6">
-                    {searchTerm || activeFilterCount > 0 
-                      ? 'Try adjusting your filters or search term'
-                      : 'No course schedules have been created yet'}
-                  </p>
-                  <Button 
-                    onClick={handleResetFilters}
-                    variant="outline"
-                    className="border-border text-foreground hover:bg-accent/50"
-                  >
-                    Clear Filters
-                  </Button>
+                  <p className="text-lg font-semibold text-foreground">No schedules matched your filters</p>
+                  <p className="mt-2 text-muted-foreground">Try broadening the search or create a new schedule group.</p>
                 </div>
               ) : viewMode === 'grid' ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-6">
-                  {filteredCourses.map((course) => (
-                    <motion.div
-                      key={course.id}
-                      whileHover={{ y: -4 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => setSelectedCourse(course)}
-                      className="bg-card border border-border rounded-xl p-5 hover:shadow-lg cursor-pointer transition-all"
-                    >
-                      <div className="flex items-start justify-between mb-4">
-                        <div>
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="text-xl font-bold text-foreground">{course.program}</span>
-                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(course.status)}`}>
-                              {getStatusIcon(course.status)}
-                              {course.status.charAt(0).toUpperCase() + course.status.slice(1)}
-                            </span>
-                          </div>
-                          <div className="text-lg font-semibold text-foreground">{course.section}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {formatYearLevel(course.year_level)} • {formatSemester(course.semester)}
-                          </div>
-                        </div>
-                        <div className="p-2 rounded-lg bg-primary/10 text-primary">
-                          <GraduationCap className="h-5 w-5" />
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">Academic Year:</span>
-                          <span className="font-medium text-foreground">{course.academic_year}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">Subjects:</span>
-                          <span className="font-medium text-foreground">{course.schedule_table.length}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">Total Units:</span>
-                          <span className="font-medium text-foreground">
-                            {course.schedule_table.reduce((sum, item) => sum + item.units, 0)}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 pt-4 border-t border-border">
-                        <div className="flex items-center justify-between">
-                          <div className="text-xs text-muted-foreground">
-                            Updated {new Date(course.updated_at).toLocaleDateString()}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-muted-foreground hover:text-foreground hover:bg-accent/50"
-                              onClick={(e?: React.MouseEvent) => {
-                                e?.stopPropagation();
-                                setSelectedCourse(course);
-                              }}
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                          </div>
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
+                <div className="grid gap-4 p-6 md:grid-cols-2 xl:grid-cols-3">
+                  {filteredSchedules.map(renderScheduleCard)}
                 </div>
               ) : (
-                // Table View
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-border">
-                    <thead className="bg-gray-100 dark:bg-gray-800/50">
+                    <thead className="bg-accent/40">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                          Program & Section
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                          Year & Semester
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                          Academic Year
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                          Subjects
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                          Status
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                          Actions
-                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Program / Section</th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Year / Semester</th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">School Year</th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Items</th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</th>
+                        <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="bg-card divide-y divide-border">
-                      {filteredCourses.map((course) => (
-                        <tr 
-                          key={course.id} 
-                          className="hover:bg-accent/10 transition-colors cursor-pointer"
-                          onClick={() => setSelectedCourse(course)}
-                        >
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center space-x-3">
-                              <div className="p-2 rounded-lg bg-primary/10 text-primary">
-                                <GraduationCap className="h-5 w-5" />
-                              </div>
-                              <div>
-                                <div className="font-medium text-foreground">{course.program}</div>
-                                <div className="text-sm text-muted-foreground">{course.section}</div>
-                              </div>
-                            </div>
+                    <tbody className="divide-y divide-border bg-card">
+                      {filteredSchedules.map((schedule) => (
+                        <tr key={schedule.id} className="hover:bg-accent/20">
+                          <td className="px-6 py-4">
+                            <div className="font-medium text-foreground">{schedule.program_name}</div>
+                            <div className="text-sm text-muted-foreground">Section {schedule.section}</div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="font-medium text-foreground">{formatYearLevel(course.year_level)}</div>
-                            <div className="text-sm text-muted-foreground">{formatSemester(course.semester)}</div>
+                          <td className="px-6 py-4 text-sm text-foreground">
+                            <div>{formatYearLevel(schedule.year_level)}</div>
+                            <div className="text-muted-foreground">{formatSemester(schedule.semester)}</div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="font-medium text-foreground">{course.academic_year}</div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium text-foreground">{course.schedule_table.length}</span>
-                              <span className="text-sm text-muted-foreground">
-                                ({course.schedule_table.reduce((sum, item) => sum + item.units, 0)} units)
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border ${getStatusColor(course.status)}`}>
-                              {getStatusIcon(course.status)}
-                              {course.status.charAt(0).toUpperCase() + course.status.slice(1)}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center gap-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-muted-foreground hover:text-foreground hover:bg-accent/50"
-                                onClick={(e?: React.MouseEvent) => {
-                                  e?.stopPropagation();
-                                  setSelectedCourse(course);
-                                }}
-                              >
+                          <td className="px-6 py-4 text-sm text-foreground">{schedule.school_year_name}</td>
+                          <td className="px-6 py-4 text-sm text-foreground">{schedule.item_count}</td>
+                          <td className="px-6 py-4">{renderStatusBadge(schedule.status)}</td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Button variant="ghost" size="sm" onClick={() => setSelectedScheduleId(schedule.id)}>
                                 <Eye className="h-4 w-4" />
                               </Button>
-                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                              <Button variant="ghost" size="sm" onClick={() => handleDeleteSchedule(schedule)} loading={busyId === schedule.id} className="text-destructive hover:bg-destructive/10 hover:text-destructive">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
                             </div>
                           </td>
                         </tr>
@@ -1091,143 +536,119 @@ export default function ViewSchedulesPage() {
                   </table>
                 </div>
               )}
-
-              {/* Table Footer */}
-              {filteredCourses.length > 0 && (
-                <div className="px-6 py-4 border-t border-border bg-gray-50 dark:bg-gray-800/30">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="text-sm text-gray-600 dark:text-gray-400">
-                      Showing {filteredCourses.length} of {courses.length} courses
-                    </div>
-                  </div>
-                </div>
-              )}
             </Card>
           </motion.div>
         </>
       )}
 
-      {/* Schedule Table View */}
-      {selectedCourse && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-        >
-          <Card className="bg-card border-border overflow-hidden">
-            <div className="p-6 border-b border-border">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-foreground">Schedule Table</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {selectedCourse.schedule_table.length} subjects • {formatSemester(selectedCourse.semester)}
-                  </p>
+      {selectedSchedule && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+          <Card className="p-6" hover={false}>
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  {renderStatusBadge(selectedSchedule.status)}
+                  <span className="text-sm text-muted-foreground">Updated {new Date(selectedSchedule.updated_at).toLocaleString()}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-border text-foreground hover:bg-accent/50"
-                    onClick={() => router.push(`/admin/edit-schedule/${selectedCourse.id}`)}
-                  >
-                    <FileText className="h-4 w-4 mr-2" />
-                    Edit Schedule
-                  </Button>
-                </div>
+                <h2 className="text-2xl font-bold text-foreground">{selectedSchedule.program_name} • Section {selectedSchedule.section}</h2>
+                <p className="mt-2 text-muted-foreground">
+                  {formatYearLevel(selectedSchedule.year_level)} • {formatSemester(selectedSchedule.semester)} • {selectedSchedule.school_year_name}
+                </p>
+                {selectedSchedule.notes && (
+                  <p className="mt-3 rounded-lg bg-accent/30 p-3 text-sm text-muted-foreground">{selectedSchedule.notes}</p>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button variant="outline" onClick={() => void fetchSchedules()}>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Refresh
+                </Button>
+                <Button variant="ghost" onClick={() => handleDeleteSchedule(selectedSchedule)} loading={busyId === selectedSchedule.id} className="text-destructive hover:bg-destructive/10 hover:text-destructive">
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </Button>
               </div>
             </div>
+          </Card>
 
-            {/* Subjects Summary */}
-            <div className="p-6 border-b border-border bg-accent/10">
-              <h4 className="font-medium text-foreground mb-3">Subjects in this Course</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {selectedCourse.schedule_table.map((subject) => (
-                  <div key={subject.id} className="p-3 rounded-lg border border-border bg-card">
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <div className="font-medium text-foreground">{subject.subject_code}</div>
-                        <div className="text-sm text-muted-foreground">{subject.subject_name}</div>
-                      </div>
-                      <span className="text-xs px-2 py-1 rounded bg-primary/10 text-primary">
-                        {subject.units} unit{subject.units !== 1 ? 's' : ''}
-                      </span>
+          <Card className="p-6" hover={false}>
+            <h3 className="mb-4 text-lg font-semibold text-foreground">Schedule Items</h3>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {selectedSchedule.items.map((item) => (
+                <div key={item.id} className="rounded-lg border border-border bg-card p-4">
+                  <div className="mb-2 flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-foreground">{item.course_code}</p>
+                      <p className="text-sm text-muted-foreground">{item.course_title}</p>
                     </div>
-                    <div className="space-y-1 text-sm">
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-3 w-3 text-muted-foreground" />
-                        <span className="text-foreground">{subject.time_slot}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-3 w-3 text-muted-foreground" />
-                        <span className="text-muted-foreground">{subject.days}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Users className="h-3 w-3 text-muted-foreground" />
-                          <span className="text-muted-foreground">{subject.instructor}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Building className="h-3 w-3 text-muted-foreground" />
-                          <span className="text-muted-foreground">{subject.room}</span>
-                        </div>
-                      </div>
-                    </div>
+                    <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                      {item.course_units} unit{item.course_units === 1 ? '' : 's'}
+                    </span>
                   </div>
-                ))}
-              </div>
+                  <div className="space-y-1 text-sm text-muted-foreground">
+                    <p>{DAY_OPTIONS.find((day) => day.code === item.day)?.label || item.day}</p>
+                    <p>{getItemTimeLabel(item)}</p>
+                    <p>Room: <span className="font-medium text-foreground">{item.room}</span></p>
+                    <p>Instructor: <span className="font-medium text-foreground">{item.instructor_name || 'TBA'}</span></p>
+                    <p>Mode: <span className="font-medium text-foreground">{getItemMode(item)}</span></p>
+                  </div>
+                </div>
+              ))}
             </div>
+          </Card>
 
-            {/* Full Schedule Table */}
-            <div className="p-6">
-              <div className="overflow-x-auto">
-                <table className="min-w-full border-collapse border border-border">
-                  <thead>
-                    <tr>
-                      <th className="border border-border p-3 bg-gray-100 dark:bg-gray-800/50 text-left text-sm font-medium text-gray-700 dark:text-gray-300">
-                        Time
-                      </th>
-                      {days.map((day) => (
-                        <th key={day} className="border border-border p-3 bg-gray-100 dark:bg-gray-800/50 text-center text-sm font-medium text-gray-700 dark:text-gray-300">
-                          {day}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {timeSlots.map((timeSlot) => (
-                      <tr key={timeSlot}>
-                        <td className="border border-border p-3 bg-gray-50 dark:bg-gray-800/30 text-sm font-medium text-foreground whitespace-nowrap">
-                          {timeSlot}
-                        </td>
-                        {days.map((day) => (
-                          <td key={day} className="border border-border p-2 min-w-[200px] max-w-[300px]">
-                            {getCellContent(timeSlot, day, selectedCourse.schedule_table)}
-                          </td>
-                        ))}
-                      </tr>
+          <Card className="overflow-hidden" hover={false}>
+            <div className="border-b border-border p-6">
+              <h3 className="text-lg font-semibold text-foreground">Weekly Timetable</h3>
+              <p className="text-sm text-muted-foreground">Generated from live schedule items for this section.</p>
+            </div>
+            <div className="overflow-x-auto p-6">
+              <table className="min-w-full border-collapse border border-border">
+                <thead>
+                  <tr>
+                    <th className="border border-border bg-accent/40 p-3 text-left text-sm font-semibold text-foreground">Time</th>
+                    {DAY_OPTIONS.map((day) => (
+                      <th key={day.code} className="border border-border bg-accent/40 p-3 text-left text-sm font-semibold text-foreground">{day.label}</th>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                  </tr>
+                </thead>
+                <tbody>
+                  {timeSlots.map((slot) => (
+                    <tr key={slot.key}>
+                      <td className="border border-border bg-accent/20 p-3 text-sm font-medium text-foreground whitespace-nowrap">{slot.label}</td>
+                      {DAY_OPTIONS.map((day) => {
+                        const items = selectedSchedule.items.filter(
+                          (item) => item.day === day.code && getSlotKey(item) === slot.key
+                        );
 
-            {/* Legend */}
-            <div className="p-6 border-t border-border bg-accent/10">
-              <h4 className="font-medium text-foreground mb-3">Legend</h4>
-              <div className="flex flex-wrap gap-4">
-                <div className="flex items-center gap-2">
-                  <div className="h-3 w-3 rounded bg-primary/10 border border-primary/20"></div>
-                  <span className="text-sm text-muted-foreground">Regular Class</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="h-3 w-3 rounded bg-emerald-500/10 border border-emerald-500/20"></div>
-                  <span className="text-sm text-muted-foreground">Laboratory</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="h-3 w-3 rounded bg-blue-500/10 border border-blue-500/20"></div>
-                  <span className="text-sm text-muted-foreground">Blended/Online</span>
-                </div>
+                        return (
+                          <td key={`${slot.key}-${day.code}`} className="min-w-[180px] border border-border p-2 align-top">
+                            {items.length === 0 ? null : items.map((item) => (
+                              <div key={item.id} className="mb-2 rounded-lg border border-primary/20 bg-primary/5 p-3 last:mb-0">
+                                <div className="font-medium text-foreground">{item.course_code}</div>
+                                <div className="text-xs text-muted-foreground">{item.course_title}</div>
+                                <div className="mt-2 text-xs text-muted-foreground">{item.instructor_name || 'TBA'} • {item.room}</div>
+                              </div>
+                            ))}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          <Card className="p-6" hover={false}>
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="text-sm text-muted-foreground">
+                {selectedSchedule.item_count} schedule items • {selectedSchedule.conflict_count} active conflict{selectedSchedule.conflict_count === 1 ? '' : 's'}
               </div>
+              <Button variant="ghost" onClick={() => setSelectedScheduleId(null)}>
+                Back to all schedules
+                <ChevronRight className="ml-2 h-4 w-4" />
+              </Button>
             </div>
           </Card>
         </motion.div>

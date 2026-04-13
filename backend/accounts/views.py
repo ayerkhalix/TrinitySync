@@ -390,6 +390,25 @@ class ChangePasswordView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+class LogoutView(APIView):
+    """
+    View for logging out users.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user_profile = getattr(request.user, 'profile', None)
+        description = f'User logged out: {user_profile.email}' if user_profile else 'User logged out'
+        ActivityLog.objects.create(
+            user=user_profile,
+            action_type=ActivityLog.ActionType.LOGOUT,
+            description=description,
+            affected_models=['UserProfile'] if user_profile else [],
+            model_ids={'UserProfile': [str(user_profile.id)]} if user_profile else {}
+        )
+        return Response({'message': 'Logged out successfully.'}, status=status.HTTP_200_OK)
+
+
 # CORRECT JWT VIEW - Use SimpleJWT's built-in view
 from rest_framework_simplejwt.views import TokenObtainPairView
 
@@ -401,3 +420,20 @@ class EmailTokenObtainPairView(TokenObtainPairView):
     """
     serializer_class = EmailTokenObtainPairSerializer
     permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        user_profile = getattr(serializer, 'user_profile', None)
+        if user_profile:
+            ActivityLog.objects.create(
+                user=user_profile,
+                action_type=ActivityLog.ActionType.LOGIN,
+                description=f'User logged in: {user_profile.email}',
+                affected_models=['UserProfile'],
+                model_ids={'UserProfile': [str(user_profile.id)]}
+            )
+
+        return Response(data, status=status.HTTP_200_OK)

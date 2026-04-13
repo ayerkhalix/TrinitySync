@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Bell, User, ChevronDown, 
@@ -11,17 +10,17 @@ import {
   Sparkles,
   Menu, X
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
+import { NotificationDropdown } from '@/components/layout/NotificationDropdown';
+import { useTheme } from '@/hooks/use-theme';
 
 export default function StudentNavbar() {
-  const pathname = usePathname();
-  const router = useRouter();
   const { user, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showNotification, setShowNotification] = useState(false);
+  const [isNotificationDropdownOpen, setIsNotificationDropdownOpen] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
+  const { theme, toggleTheme } = useTheme();
 
   const notifications = [
     { id: 1, text: 'Your add request for ITCP 106 is pending', time: '2h ago', unread: true },
@@ -31,18 +30,6 @@ export default function StudentNavbar() {
 
   const unreadCount = notifications.filter(n => n.unread).length;
 
-  // Initialize dark mode
-  useEffect(() => {
-    const isDarkMode = localStorage.getItem('darkMode') === 'true' || 
-                      (!('darkMode' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    setDarkMode(isDarkMode);
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, []);
-
   // Show notification badge
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -50,17 +37,6 @@ export default function StudentNavbar() {
     }, 2000);
     return () => clearTimeout(timer);
   }, []);
-
-  const toggleDarkMode = () => {
-    const newDarkMode = !darkMode;
-    setDarkMode(newDarkMode);
-    localStorage.setItem('darkMode', newDarkMode.toString());
-    if (newDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  };
 
   const profileActions = [
     { label: 'View Profile', icon: User, href: '/student/profile' },
@@ -71,6 +47,7 @@ export default function StudentNavbar() {
   ];
 
   const closeDropdowns = () => {
+    setIsNotificationDropdownOpen(false);
     setIsUserDropdownOpen(false);
     setIsMobileMenuOpen(false);
   };
@@ -79,6 +56,9 @@ export default function StudentNavbar() {
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
+      if (!target.closest('.notification-dropdown') && !target.closest('.notification-button')) {
+        setIsNotificationDropdownOpen(false);
+      }
       if (!target.closest('.user-dropdown') && !target.closest('.user-menu-button')) {
         setIsUserDropdownOpen(false);
       }
@@ -144,20 +124,20 @@ export default function StudentNavbar() {
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                onClick={toggleDarkMode}
+                onClick={toggleTheme}
                 className="flex items-center justify-center h-10 w-10 rounded-xl bg-accent text-muted-foreground hover:text-foreground hover:bg-accent/80 border border-border transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20"
-                aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+                aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
               >
                 <AnimatePresence mode="wait">
                   <motion.div
-                    key={darkMode ? 'dark' : 'light'}
+                    key={theme}
                     initial={{ opacity: 0, rotate: -180 }}
                     animate={{ opacity: 1, rotate: 0 }}
                     exit={{ opacity: 0, rotate: 180 }}
                     transition={{ duration: 0.3 }}
                     className="flex items-center justify-center"
                   >
-                    {darkMode ? (
+                    {theme === 'dark' ? (
                       <Sun className="h-5 w-5" />
                     ) : (
                       <Moon className="h-5 w-5" />
@@ -167,12 +147,16 @@ export default function StudentNavbar() {
               </motion.button>
 
               {/* Notification */}
-              <motion.div className="relative">
+              <motion.div className="relative notification-dropdown">
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  className="flex items-center justify-center h-10 w-10 rounded-xl bg-accent text-muted-foreground hover:text-foreground hover:bg-accent/80 border border-border transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  onClick={() => router.push('/student/notifications')}
+                  type="button"
+                  className="notification-button flex items-center justify-center h-10 w-10 rounded-xl bg-accent text-muted-foreground hover:text-foreground hover:bg-accent/80 border border-border transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  onClick={() => {
+                    setIsNotificationDropdownOpen(!isNotificationDropdownOpen);
+                    setIsUserDropdownOpen(false);
+                  }}
                 >
                   <Bell className="h-5 w-5" />
                   {showNotification && unreadCount > 0 && (
@@ -183,6 +167,11 @@ export default function StudentNavbar() {
                     />
                   )}
                 </motion.button>
+                <NotificationDropdown
+                  isOpen={isNotificationDropdownOpen}
+                  notifications={notifications}
+                  title="Student notifications"
+                />
               </motion.div>
 
               {/* User Menu */}

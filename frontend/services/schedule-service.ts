@@ -13,7 +13,7 @@ export interface CreateScheduleGroupData {
   section: string;
   semester: string;
   school_year: string;    // UUID
-  status?: 'draft' | 'pending' | 'approved' | 'published';
+  status?: 'draft' | 'pending' | 'approved' | 'active' | 'archived' | 'cancelled';
   notes?: string;
 }
 
@@ -40,7 +40,7 @@ export interface ScheduleGroup {
   semester: string;
   school_year: string;
   school_year_name: string;
-  status: 'draft' | 'pending' | 'approved' | 'published';
+  status: 'draft' | 'pending' | 'approved' | 'active' | 'archived' | 'cancelled';
   created_by: string;
   created_by_email: string;
   approved_by: string | null;
@@ -48,6 +48,7 @@ export interface ScheduleGroup {
   notes: string;
   created_at: string;
   updated_at: string;
+  items: ScheduleItem[];
   item_count: number;
   conflict_count: number;
 }
@@ -59,6 +60,7 @@ export interface ScheduleItem {
   course: string;                // UUID
   course_code: string;           // display
   course_title: string;          // display
+  course_units: number;          // display
   
   day: string;
   start_time: string;
@@ -76,7 +78,7 @@ export interface ScheduleItem {
   is_lab: boolean;
   is_online: boolean;
   online_link: string | null;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
 }
 
 export interface SchoolYear {
@@ -86,7 +88,7 @@ export interface SchoolYear {
   start_date: string;
   end_date: string;
   is_active: boolean;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
 }
 
 export interface Conflict {
@@ -134,10 +136,10 @@ export interface BulkCreateResponse {
   status: 'success' | 'partial_success' | 'error';
   created: number;
   schedule_ids: string[];
-  conflicts?: any[];
+  conflicts?: Conflict[];
 }
 
-export interface UpdateScheduleItemData extends Partial<CreateScheduleItemData> {}
+export type UpdateScheduleItemData = Partial<CreateScheduleItemData>;
 
 // ============================================
 // SCHEDULE GROUP SERVICE
@@ -175,7 +177,7 @@ export class ScheduleGroupService {
 
   static async checkConflicts(id: string): Promise<{
     conflicts_found: number;
-    conflicts: any[];
+    conflicts: Conflict[];
   }> {
     const response = await api.post(`/scheduling/schedule-groups/${id}/check_conflicts/`);
     return response.data;
@@ -253,7 +255,7 @@ export class ConflictCheckService {
     max_students?: number;
   }>): Promise<{
     has_conflicts: boolean;
-    conflicts: any[];
+    conflicts: Conflict[];
     count: number;
   }> {
     const response = await api.post('/scheduling/check-schedule-conflicts/', {

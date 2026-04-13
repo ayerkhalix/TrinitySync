@@ -14,11 +14,11 @@ class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
     """
     API endpoint for viewing activity logs.
     """
-    queryset = ActivityLog.objects.all().select_related('user').order_by('-timestamp')
+    queryset = ActivityLog.objects.all().select_related('user', 'user__user').order_by('-timestamp')
     serializer_class = ActivityLogSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['action_type', 'user']
-    search_fields = ['description', 'user__email']
+    search_fields = ['description', 'user__email', 'user__user__first_name', 'user__user__last_name']
     ordering_fields = ['timestamp', 'action_type']
     ordering = ['-timestamp']
     

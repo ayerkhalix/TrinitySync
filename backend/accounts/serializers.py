@@ -274,6 +274,7 @@ class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
         
         # Call parent validate to generate token
         data = super().validate(attrs)
+        self.user_profile = user_profile
         
         # Add user data to response
         refresh = self.get_token(auth_user)

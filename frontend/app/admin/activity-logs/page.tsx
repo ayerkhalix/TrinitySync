@@ -1,486 +1,446 @@
-// app/admin/activity-logs/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  ArrowLeft, Calendar, User, Clock, 
-  Filter, Download, Search, RefreshCw,
-  Eye, FileText, AlertTriangle, CheckCircle,
-  History, ChevronRight, MoreVertical
+import {
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle,
+  ChevronRight,
+  Download,
+  Eye,
+  FileText,
+  History,
+  RefreshCw,
+  Search,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { useRouter } from 'next/navigation';
-import { Navbar } from '@/components/layout/navbar';
+import { apiClient } from '@/services/api-client';
+
+interface ActivityLog {
+  id: string;
+  user: string | null;
+  user_name: string;
+  user_email: string | null;
+  user_role: string | null;
+  action_type: string;
+  action_type_display: string;
+  description: string;
+  ip_address: string | null;
+  affected_models: string[];
+  model_ids: Record<string, string[]>;
+  metadata: Record<string, unknown>;
+  details: Record<string, unknown>;
+  status: 'success' | 'warning' | 'error';
+  timestamp: string;
+}
+
+const roleLabel = (role: string | null) => {
+  if (!role) return 'System';
+  return role.replaceAll('_', ' ');
+};
+
+const roleColor = (role: string | null) => {
+  switch (role) {
+    case 'SUPER_ADMIN':
+      return 'border-purple-500/20 bg-purple-500/10 text-purple-600';
+    case 'COLLEGE_ADMIN':
+      return 'border-blue-500/20 bg-blue-500/10 text-blue-600';
+    case 'STUDENT':
+      return 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600';
+    default:
+      return 'border-amber-500/20 bg-amber-500/10 text-amber-600';
+  }
+};
+
+const statusColor = (status: ActivityLog['status']) => {
+  switch (status) {
+    case 'success':
+      return 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600';
+    case 'warning':
+      return 'border-amber-500/20 bg-amber-500/10 text-amber-600';
+    case 'error':
+      return 'border-destructive/20 bg-destructive/10 text-destructive';
+    default:
+      return 'border-border bg-accent text-muted-foreground';
+  }
+};
+
+const getActivityIcon = (type: string) => {
+  switch (type) {
+    case 'login':
+    case 'logout':
+      return Eye;
+    case 'create':
+    case 'update':
+    case 'schedule_generate':
+      return FileText;
+    case 'conflict_resolved':
+    case 'approve':
+      return CheckCircle;
+    case 'conflict_detected':
+    case 'reject':
+      return AlertTriangle;
+    default:
+      return History;
+  }
+};
+
+const formatRelativeTime = (timestamp: string) => {
+  const date = new Date(timestamp);
+  const diff = Date.now() - date.getTime();
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (minutes < 60) return `${Math.max(minutes, 1)} min ago`;
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
+  return date.toLocaleDateString();
+};
+
+const isInRange = (timestamp: string, range: string) => {
+  if (range === 'all') return true;
+
+  const date = new Date(timestamp).getTime();
+  const now = Date.now();
+  const diff = now - date;
+
+  switch (range) {
+    case 'today':
+      return diff <= 24 * 60 * 60 * 1000;
+    case '7d':
+      return diff <= 7 * 24 * 60 * 60 * 1000;
+    case '30d':
+      return diff <= 30 * 24 * 60 * 60 * 1000;
+    default:
+      return true;
+  }
+};
 
 export default function ActivityLogsPage() {
   const router = useRouter();
-  const [logs, setLogs] = useState<any[]>([]);
+  const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedLogId, setSelectedLogId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
-    type: '',
-    user_role: '',
-    date_range: 'today',
+    actionType: '',
+    userRole: '',
+    dateRange: 'today',
   });
 
-  useEffect(() => {
-    fetchLogs();
-  }, []);
-
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
     setLoading(true);
-    // Mock data
-    setTimeout(() => {
-      setLogs([
-        {
-          id: 1,
-          user_name: 'John Doe',
-          user_role: 'department_admin',
-          activity_type: 'schedule_create',
-          activity_type_display: 'Schedule Created',
-          details: { course_code: 'ITCP 106', room: 'CL2' },
-          ip_address: '192.168.1.100',
-          timestamp: '2024-01-15T08:00:00Z',
-          status: 'success'
+    setError(null);
+    try {
+      const response = await apiClient.get<ActivityLog[]>('/activity-logs/activity-logs/', {
+        params: {
+          ordering: '-timestamp',
+          ...(searchTerm ? { search: searchTerm } : {}),
+          ...(filters.actionType ? { action_type: filters.actionType } : {}),
         },
-        {
-          id: 2,
-          user_name: 'Jane Smith',
-          user_role: 'student',
-          activity_type: 'login',
-          activity_type_display: 'User Login',
-          details: { method: 'Email' },
-          ip_address: '192.168.1.101',
-          timestamp: '2024-01-15T07:30:00Z',
-          status: 'success'
-        },
-        {
-          id: 3,
-          user_name: 'Admin User',
-          user_role: 'super_admin',
-          activity_type: 'bulk_schedule',
-          activity_type_display: 'Bulk Schedule Operation',
-          details: { count: 10, errors: 0 },
-          ip_address: '192.168.1.102',
-          timestamp: '2024-01-14T15:45:00Z',
-          status: 'success'
-        },
-        {
-          id: 4,
-          user_name: 'System',
-          user_role: 'system',
-          activity_type: 'conflict_detected',
-          activity_type_display: 'Conflict Detected',
-          details: { conflict_type: 'room', location: 'CL2', time: '8:00 AM' },
-          ip_address: '127.0.0.1',
-          timestamp: '2024-01-14T10:20:00Z',
-          status: 'warning'
-        },
-        {
-          id: 5,
-          user_name: 'Robert Chen',
-          user_role: 'department_admin',
-          activity_type: 'schedule_update',
-          activity_type_display: 'Schedule Updated',
-          details: { course_code: 'ITDS 108', changes: 'Room changed' },
-          ip_address: '192.168.1.103',
-          timestamp: '2024-01-13T14:15:00Z',
-          status: 'success'
-        },
-      ]);
+      });
+      setLogs(response.data);
+    } catch (fetchError) {
+      console.error('Failed to fetch activity logs:', fetchError);
+      setError('Unable to load activity logs from the backend right now.');
+    } finally {
       setLoading(false);
-    }, 1000);
-  };
-
-  const getActivityIcon = (type: string) => {
-    switch (type) {
-      case 'login': return <Eye className="h-4 w-4" />;
-      case 'schedule_create': return <FileText className="h-4 w-4" />;
-      case 'schedule_update': return <FileText className="h-4 w-4" />;
-      case 'bulk_schedule': return <FileText className="h-4 w-4" />;
-      case 'conflict_detected': return <AlertTriangle className="h-4 w-4" />;
-      case 'conflict_resolved': return <CheckCircle className="h-4 w-4" />;
-      default: return <AlertTriangle className="h-4 w-4" />;
     }
-  };
+  }, [filters.actionType, searchTerm]);
 
-  const getRoleColor = (role: string) => {
-    switch (role) {
-      case 'super_admin': return 'bg-purple-500/10 text-purple-600 border-purple-500/20';
-      case 'department_admin': return 'bg-blue-500/10 text-blue-600 border-blue-500/20';
-      case 'student': return 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20';
-      case 'system': return 'bg-amber-500/10 text-amber-600 border-amber-500/20';
-      default: return 'bg-muted text-muted-foreground';
-    }
-  };
+  useEffect(() => {
+    void fetchLogs();
+  }, [fetchLogs]);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'success': return 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20';
-      case 'warning': return 'bg-amber-500/10 text-amber-600 border-amber-500/20';
-      case 'error': return 'bg-destructive/10 text-destructive border-destructive/20';
-      default: return 'bg-muted text-muted-foreground';
-    }
-  };
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      void fetchLogs();
+    }, 300);
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
+    return () => clearTimeout(timeout);
+  }, [fetchLogs, searchTerm, filters.actionType]);
 
-    if (diffMins < 60) return `${diffMins} min ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
-    return date.toLocaleDateString();
+  const filteredLogs = useMemo(() => {
+    return logs.filter((log) => {
+      const matchesRole = !filters.userRole || log.user_role === filters.userRole;
+      const matchesDateRange = isInRange(log.timestamp, filters.dateRange);
+      return matchesRole && matchesDateRange;
+    });
+  }, [logs, filters.userRole, filters.dateRange]);
+
+  const selectedLog = useMemo(
+    () => filteredLogs.find((log) => log.id === selectedLogId) ?? null,
+    [filteredLogs, selectedLogId]
+  );
+
+  const actionOptions = useMemo(
+    () => Array.from(new Set(logs.map((log) => log.action_type))).sort(),
+    [logs]
+  );
+
+  const roleOptions = useMemo(
+    () => Array.from(new Set(logs.map((log) => log.user_role).filter(Boolean) as string[])).sort(),
+    [logs]
+  );
+
+  const stats = useMemo(() => {
+    const now = Date.now();
+    return {
+      total: filteredLogs.length,
+      today: filteredLogs.filter((log) => now - new Date(log.timestamp).getTime() <= 24 * 60 * 60 * 1000).length,
+      users: new Set(filteredLogs.map((log) => log.user_email || log.user_name)).size,
+      warnings: filteredLogs.filter((log) => log.status !== 'success').length,
+    };
+  }, [filteredLogs]);
+
+  const exportLogs = () => {
+    const blob = new Blob([JSON.stringify(filteredLogs, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `activity-logs-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <Navbar />
-      
-      <div className="pt-4">
-        <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-          {/* Header */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-10"
-          >
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-8">
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-                  <span className="text-sm font-medium text-muted-foreground tracking-wide">ACTIVITY LOGS</span>
-                </div>
-                <h1 className="text-3xl lg:text-4xl font-bold tracking-tight text-foreground">
-                  System Activity Logs
-                </h1>
-                <p className="text-muted-foreground text-base lg:text-lg max-w-2xl">
-                  Monitor all system activities, user actions, and administrative operations.
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <Button 
-                  variant="outline"
-                  onClick={() => router.push('/admin')}
-                >
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back to Dashboard
-                </Button>
-                <Button 
-                  className="bg-primary text-primary-foreground hover:bg-primary/90"
-                  onClick={fetchLogs}
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Refresh Logs
-                </Button>
-              </div>
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-10">
+        <div className="mb-8 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+              <span className="text-sm font-medium tracking-wide text-muted-foreground">ACTIVITY LOGS</span>
             </div>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground lg:text-4xl">System Activity Logs</h1>
+            <p className="max-w-2xl text-base text-muted-foreground lg:text-lg">
+              Live audit history from the backend, including schedule operations, approvals, and conflict handling.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button variant="outline" onClick={() => router.push('/admin')}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Dashboard
+            </Button>
+            <Button variant="outline" onClick={exportLogs}>
+              <Download className="mr-2 h-4 w-4" />
+              Export JSON
+            </Button>
+            <Button onClick={() => void fetchLogs()}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Refresh Logs
+            </Button>
+          </div>
+        </div>
+        <Separator className="bg-border/50" />
+      </motion.div>
 
-            <Separator className="bg-border/50" />
-          </motion.div>
-
-          {/* Filters & Search */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="mb-8"
-          >
-            <Card className="border-border/40">
-              <div className="p-6">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-                  {/* Search */}
-                  <div className="relative flex-1 max-w-xl">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search activities, users, or details..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-12 h-12 bg-accent/50 border-border"
-                    />
-                  </div>
-                  
-                  {/* Filters */}
-                  <div className="flex items-center gap-3">
-                    <select
-                      value={filters.type}
-                      onChange={(e) => setFilters({ ...filters, type: e.target.value })}
-                      className="h-12 rounded-lg border border-border bg-accent/50 px-4 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    >
-                      <option value="">All Activities</option>
-                      <option value="login">Logins</option>
-                      <option value="schedule_create">Schedule Creation</option>
-                      <option value="schedule_update">Schedule Updates</option>
-                      <option value="bulk_schedule">Bulk Operations</option>
-                      <option value="conflict_detected">Conflict Detection</option>
-                    </select>
-                    
-                    <select
-                      value={filters.user_role}
-                      onChange={(e) => setFilters({ ...filters, user_role: e.target.value })}
-                      className="h-12 rounded-lg border border-border bg-accent/50 px-4 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                    >
-                      <option value="">All Roles</option>
-                      <option value="student">Students</option>
-                      <option value="department_admin">Department Admins</option>
-                      <option value="super_admin">Super Admins</option>
-                      <option value="system">System</option>
-                    </select>
-                    
-                    <Button 
-                      variant="outline" 
-                      size="lg"
-                      className="h-12 border-border/50"
-                    >
-                      <Filter className="h-4 w-4 mr-2" />
-                      More Filters
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </Card>
-          </motion.div>
-
-          {/* Stats Overview */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
-            className="mb-8"
-          >
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <Card className="border-border/40 bg-card/50">
-                <div className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Total Activities</p>
-                      <p className="text-2xl font-bold text-foreground">1,245</p>
-                    </div>
-                    <div className="p-2 rounded-lg bg-primary/10">
-                      <History className="h-5 w-5 text-primary" />
-                    </div>
-                  </div>
-                </div>
-              </Card>
-              
-              <Card className="border-border/40 bg-card/50">
-                <div className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Today's Logs</p>
-                      <p className="text-2xl font-bold text-foreground">42</p>
-                    </div>
-                    <div className="p-2 rounded-lg bg-emerald-500/10">
-                      <Clock className="h-5 w-5 text-emerald-500" />
-                    </div>
-                  </div>
-                </div>
-              </Card>
-              
-              <Card className="border-border/40 bg-card/50">
-                <div className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Active Users</p>
-                      <p className="text-2xl font-bold text-foreground">156</p>
-                    </div>
-                    <div className="p-2 rounded-lg bg-blue-500/10">
-                      <User className="h-5 w-5 text-blue-500" />
-                    </div>
-                  </div>
-                </div>
-              </Card>
-              
-              <Card className="border-border/40 bg-card/50">
-                <div className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">System Alerts</p>
-                      <p className="text-2xl font-bold text-foreground">8</p>
-                    </div>
-                    <div className="p-2 rounded-lg bg-amber-500/10">
-                      <AlertTriangle className="h-5 w-5 text-amber-500" />
-                    </div>
-                  </div>
-                </div>
-              </Card>
+      {error && (
+        <Card className="mb-6 border-destructive/30 bg-destructive/5 p-4" hover={false}>
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 text-destructive" />
+            <div>
+              <p className="font-medium text-foreground">Activity logs could not be loaded</p>
+              <p className="text-sm text-muted-foreground">{error}</p>
             </div>
-          </motion.div>
+          </div>
+        </Card>
+      )}
 
-          {/* Logs Table */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-          >
-            <Card className="border-border/40 overflow-hidden">
-              <div className="p-6">
-                {/* Card Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-border/30">
-                  <div>
-                    <h2 className="text-xl font-semibold text-foreground">Recent Activities</h2>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Latest system activities and user actions
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      className="border-border/50"
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Export
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      className="text-muted-foreground hover:text-foreground"
-                    >
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
+      <Card className="mb-8 p-6" hover={false}>
+        <div className="grid gap-4 lg:grid-cols-[2fr_repeat(3,minmax(0,1fr))]">
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Search descriptions, users, or affected records"
+              className="pl-11"
+            />
+          </div>
+          <select value={filters.actionType} onChange={(event) => setFilters((current) => ({ ...current, actionType: event.target.value }))} className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground">
+            <option value="">All actions</option>
+            {actionOptions.map((option) => (
+              <option key={option} value={option}>{option.replaceAll('_', ' ')}</option>
+            ))}
+          </select>
+          <select value={filters.userRole} onChange={(event) => setFilters((current) => ({ ...current, userRole: event.target.value }))} className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground">
+            <option value="">All roles</option>
+            {roleOptions.map((option) => (
+              <option key={option} value={option}>{roleLabel(option)}</option>
+            ))}
+          </select>
+          <select value={filters.dateRange} onChange={(event) => setFilters((current) => ({ ...current, dateRange: event.target.value }))} className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground">
+            <option value="today">Today</option>
+            <option value="7d">Last 7 days</option>
+            <option value="30d">Last 30 days</option>
+            <option value="all">All time</option>
+          </select>
+        </div>
+      </Card>
 
-                {/* Table */}
-                {loading ? (
-                  <div className="flex items-center justify-center py-12">
-                    <div className="text-center">
-                      <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent"></div>
-                      <p className="mt-4 text-muted-foreground">Loading activity logs...</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <div className="min-w-full">
-                      <div className="overflow-hidden rounded-lg border border-border/50">
-                        {/* Table Header */}
-                        <div className="grid grid-cols-12 bg-accent text-sm font-medium text-foreground">
-                          <div className="col-span-4 p-4 border-r border-border">Activity & User</div>
-                          <div className="col-span-3 p-4 border-r border-border">Details</div>
-                          <div className="col-span-2 p-4 border-r border-border">IP Address</div>
-                          <div className="col-span-3 p-4">Time & Status</div>
-                        </div>
+      <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-4">
+        <Card className="p-4" hover={false}>
+          <p className="text-sm text-muted-foreground">Total activities</p>
+          <p className="mt-1 text-2xl font-bold text-foreground">{stats.total}</p>
+        </Card>
+        <Card className="p-4" hover={false}>
+          <p className="text-sm text-muted-foreground">Today</p>
+          <p className="mt-1 text-2xl font-bold text-foreground">{stats.today}</p>
+        </Card>
+        <Card className="p-4" hover={false}>
+          <p className="text-sm text-muted-foreground">Unique actors</p>
+          <p className="mt-1 text-2xl font-bold text-foreground">{stats.users}</p>
+        </Card>
+        <Card className="p-4" hover={false}>
+          <p className="text-sm text-muted-foreground">Warnings / errors</p>
+          <p className="mt-1 text-2xl font-bold text-foreground">{stats.warnings}</p>
+        </Card>
+      </div>
 
-                        {/* Table Body */}
-                        <div className="divide-y divide-border">
-                          {logs.map((log, index) => (
-                            <motion.div
-                              key={log.id}
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: index * 0.05 }}
-                              className="grid grid-cols-12 hover:bg-accent/30 transition-colors cursor-pointer group"
-                              onClick={() => console.log('View log details:', log.id)}
-                            >
-                              {/* Activity & User */}
-                              <div className="col-span-4 p-4 border-r border-border">
-                                <div className="flex items-start space-x-3">
-                                  <div className={`p-2 rounded-lg ${getStatusColor(log.status)}`}>
-                                    {getActivityIcon(log.activity_type)}
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <h3 className="font-medium text-foreground group-hover:text-primary transition-colors">
-                                      {log.activity_type_display}
-                                    </h3>
-                                    <div className="flex items-center gap-2 mt-2">
-                                      <div className="h-6 w-6 rounded-full bg-accent flex items-center justify-center">
-                                        <User className="h-3 w-3 text-muted-foreground" />
-                                      </div>
-                                      <span className="text-sm text-foreground">{log.user_name}</span>
-                                      <Badge variant="outline" className={`text-xs ${getRoleColor(log.user_role)}`}>
-                                        {log.user_role.replace('_', ' ')}
-                                      </Badge>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
+        <Card className="overflow-hidden" hover={false}>
+          <div className="border-b border-border p-6">
+            <h2 className="text-xl font-semibold text-foreground">Recent Activities</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Showing {filteredLogs.length} live records from the audit trail.</p>
+          </div>
 
-                              {/* Details */}
-                              <div className="col-span-3 p-4 border-r border-border">
-                                {log.details && Object.keys(log.details).length > 0 ? (
-                                  <div className="space-y-1">
-                                    {Object.entries(log.details).map(([key, value]) => (
-                                      <div key={key} className="flex items-center gap-2">
-                                        <span className="text-xs text-muted-foreground">{key}:</span>
-                                        <span className="text-sm font-medium text-foreground">{String(value)}</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <span className="text-sm text-muted-foreground">No additional details</span>
-                                )}
-                              </div>
-
-                              {/* IP Address */}
-                              <div className="col-span-2 p-4 border-r border-border">
-                                <code className="text-xs font-mono text-muted-foreground bg-accent px-2 py-1 rounded">
-                                  {log.ip_address}
-                                </code>
-                              </div>
-
-                              {/* Time & Status */}
-                              <div className="col-span-3 p-4">
-                                <div className="flex flex-col space-y-2">
-                                  <div className="flex items-center gap-2">
-                                    <Clock className="h-3 w-3 text-muted-foreground" />
-                                    <span className="text-sm font-medium text-foreground">
-                                      {formatDate(log.timestamp)}
-                                    </span>
-                                  </div>
-                                  <Badge variant="outline" className={`text-xs w-fit ${getStatusColor(log.status)}`}>
-                                    {log.status.charAt(0).toUpperCase() + log.status.slice(1)}
-                                  </Badge>
-                                  <div className="text-xs text-muted-foreground">
-                                    {new Date(log.timestamp).toLocaleTimeString([], {
-                                      hour: '2-digit',
-                                      minute: '2-digit',
-                                      hour12: true
-                                    })}
-                                  </div>
-                                </div>
-                              </div>
-                            </motion.div>
-                          ))}
+          {loading ? (
+            <div className="py-12 text-center">
+              <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent" />
+              <p className="mt-4 text-muted-foreground">Loading activity logs...</p>
+            </div>
+          ) : filteredLogs.length === 0 ? (
+            <div className="py-12 text-center">
+              <p className="text-lg font-semibold text-foreground">No activity logs matched your filters</p>
+              <p className="mt-2 text-muted-foreground">Try broadening your search or date range.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {filteredLogs.map((log, index) => {
+                const Icon = getActivityIcon(log.action_type);
+                return (
+                  <motion.button
+                    key={log.id}
+                    type="button"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.03 }}
+                    className="grid w-full gap-4 p-5 text-left transition-colors hover:bg-accent/30 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto]"
+                    onClick={() => setSelectedLogId(log.id)}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`rounded-lg p-2 ${statusColor(log.status)}`}>
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-foreground">{log.action_type_display}</p>
+                        <p className="mt-1 text-sm text-muted-foreground">{log.description}</p>
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <Badge variant="outline" className={roleColor(log.user_role)}>
+                            {roleLabel(log.user_role)}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">{log.user_name}</span>
+                          {log.user_email && <span className="text-xs text-muted-foreground">• {log.user_email}</span>}
                         </div>
                       </div>
                     </div>
-                  </div>
-                )}
-
-                {/* Card Footer */}
-                <div className="mt-6 pt-4 border-t border-border/30">
-                  <div className="flex items-center justify-between">
                     <div className="text-sm text-muted-foreground">
-                      Showing {logs.length} of 1,245 activities
+                      {Object.keys(log.details).length > 0 ? (
+                        <div className="space-y-1">
+                          {Object.entries(log.details).slice(0, 3).map(([key, value]) => (
+                            <div key={key}>
+                              <span className="font-medium text-foreground">{key}:</span> {JSON.stringify(value)}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        'No additional metadata'
+                      )}
                     </div>
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      className="text-muted-foreground hover:text-foreground"
-                      onClick={() => router.push('/admin/activity-logs/all')}
-                    >
-                      View all activity logs
-                      <ChevronRight className="h-4 w-4 ml-2" />
-                    </Button>
-                  </div>
+                    <div className="flex flex-col items-start gap-2 lg:items-end">
+                      <Badge variant="outline" className={statusColor(log.status)}>
+                        {log.status}
+                      </Badge>
+                      <div className="text-sm text-muted-foreground">{formatRelativeTime(log.timestamp)}</div>
+                      <div className="text-xs text-muted-foreground">{new Date(log.timestamp).toLocaleString()}</div>
+                    </div>
+                  </motion.button>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+
+        <Card className="p-6" hover={false}>
+          <h2 className="text-lg font-semibold text-foreground">Log Details</h2>
+          {selectedLog ? (
+            <div className="mt-4 space-y-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Action</p>
+                <p className="font-medium text-foreground">{selectedLog.action_type_display}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Description</p>
+                <p className="text-foreground">{selectedLog.description}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Actor</p>
+                <p className="text-foreground">{selectedLog.user_name}</p>
+                {selectedLog.user_email && <p className="text-sm text-muted-foreground">{selectedLog.user_email}</p>}
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Role</p>
+                  <Badge variant="outline" className={roleColor(selectedLog.user_role)}>
+                    {roleLabel(selectedLog.user_role)}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Status</p>
+                  <Badge variant="outline" className={statusColor(selectedLog.status)}>
+                    {selectedLog.status}
+                  </Badge>
                 </div>
               </div>
-            </Card>
-          </motion.div>
+              <div>
+                <p className="text-sm text-muted-foreground">Timestamp</p>
+                <p className="text-foreground">{new Date(selectedLog.timestamp).toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">IP Address</p>
+                <p className="font-mono text-sm text-foreground">{selectedLog.ip_address || 'Unavailable'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Affected models</p>
+                <p className="text-foreground">{selectedLog.affected_models.length > 0 ? selectedLog.affected_models.join(', ') : 'None recorded'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Metadata</p>
+                <pre className="overflow-x-auto rounded-lg bg-accent/30 p-3 text-xs text-foreground">{JSON.stringify(selectedLog.details, null, 2)}</pre>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-6 text-sm text-muted-foreground">
+              Select a log entry to inspect its full metadata, affected records, and audit details.
+            </div>
+          )}
 
-          {/* Bottom Spacing */}
-          <div className="h-8" />
-        </div>
+          <div className="mt-6 border-t border-border pt-4">
+            <Button variant="ghost" onClick={() => setSelectedLogId(null)} disabled={!selectedLog}>
+              Clear selection
+              <ChevronRight className="ml-2 h-4 w-4" />
+            </Button>
+          </div>
+        </Card>
       </div>
     </div>
   );

@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Menu, X, Calendar, LogOut, User, 
   Activity, Settings, ChevronDown, 
-  Moon, Sun, Bell, Search, Sparkles, GraduationCap,
+  Moon, Sun, Bell, Sparkles, GraduationCap,
   Shield, Building2, CalendarDays, Clock, ChevronRight
 } from 'lucide-react';
 import Link from 'next/link';
@@ -14,10 +14,12 @@ import { usePathname } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { useAuth } from '@/hooks/use-auth';
 import { useTheme } from '../../hooks/use-theme';
+import { NotificationDropdown } from '@/components/layout/NotificationDropdown';
 
 export const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showNotification, setShowNotification] = useState(false);
+  const [isNotificationDropdownOpen, setIsNotificationDropdownOpen] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const pathname = usePathname();
   const { user, logout } = useAuth();
@@ -44,6 +46,11 @@ export const Navbar = () => {
     { href: '/admin/activity-logs', label: 'Activity Logs', icon: <Activity size={18} /> },
     { href: '/admin/settings', label: 'System Settings', icon: <Settings size={18} /> },
   ];
+  const notifications = [
+    { id: 1, text: 'Faculty scheduling changes need review', time: '15m ago', unread: true },
+    { id: 2, text: 'A new conflict alert was generated for Room CL2', time: '1h ago', unread: true },
+    { id: 3, text: 'Schedule export for BSIT was completed', time: 'Yesterday', unread: false },
+  ];
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -54,6 +61,7 @@ export const Navbar = () => {
   }, []);
 
   const closeDropdowns = () => {
+    setIsNotificationDropdownOpen(false);
     setIsUserDropdownOpen(false);
     setIsMenuOpen(false);
   };
@@ -61,6 +69,9 @@ export const Navbar = () => {
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
+      if (!target.closest('.notification-dropdown') && !target.closest('.notification-button')) {
+        setIsNotificationDropdownOpen(false);
+      }
       if (!target.closest('.user-dropdown') && !target.closest('.user-menu-button')) {
         setIsUserDropdownOpen(false);
       }
@@ -204,11 +215,16 @@ export const Navbar = () => {
               </motion.button>
 
               {/* Notification */}
-              <motion.div className="relative">
+              <motion.div className="relative notification-dropdown">
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  className="flex items-center justify-center h-10 w-10 rounded-xl bg-accent text-muted-foreground hover:text-foreground hover:bg-accent/80 border border-border transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
+                  type="button"
+                  className="notification-button flex items-center justify-center h-10 w-10 rounded-xl bg-accent text-muted-foreground hover:text-foreground hover:bg-accent/80 border border-border transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer"
+                  onClick={() => {
+                    setIsNotificationDropdownOpen(!isNotificationDropdownOpen);
+                    setIsUserDropdownOpen(false);
+                  }}
                 >
                   <Bell className="h-5 w-5" />
                   {showNotification && (
@@ -219,6 +235,11 @@ export const Navbar = () => {
                     />
                   )}
                 </motion.button>
+                <NotificationDropdown
+                  isOpen={isNotificationDropdownOpen}
+                  notifications={notifications}
+                  title="Admin notifications"
+                />
               </motion.div>
 
               {/* User Menu */}

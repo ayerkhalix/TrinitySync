@@ -10,7 +10,7 @@ from . import views
 from .views import (
     UserProfileViewSet, StudentProfileViewSet, StaffProfileViewSet,
     CurrentUserView, ChangePasswordView, EmailTokenObtainPairView,
-    register_user, InstructorViewSet
+    LogoutView, register_user, InstructorViewSet
 )
 
 router = DefaultRouter()
@@ -26,6 +26,7 @@ urlpatterns = [
     path('change-password/', ChangePasswordView.as_view(), name='change-password'),
     # JWT Authentication endpoints
     path('auth/login/', EmailTokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('auth/logout/', LogoutView.as_view(), name='token_logout'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('auth/verify/', TokenVerifyView.as_view(), name='token_verify'),
 
