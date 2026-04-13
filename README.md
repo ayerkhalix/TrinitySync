@@ -195,5 +195,79 @@ TrinitySync is mainly focused on:
 
 ---
 
+Follow the steps below to set up TrinitySync locally for development.
+
+---
+
+# 🖥️ Prerequisites
+
+Make sure you have the following installed:
+
+- **Node.js** (for frontend)
+- **Python 3.10+** (for backend)
+- **pip** (Python package manager)
+- **Git** (optional but recommended)
+
+---
+
+# 🌐 Frontend Setup (Next.js)
+
+### 1. Navigate to the frontend directory
+
+cd frontend
+
+➡️ Moves you into the frontend project folder where the Next.js app is located.
+
+2. Install dependencies
+npm install
+
+➡️ Installs all required packages (React, Next.js, Tailwind, etc.) listed in package.json.
+
+3. Run the development server
+npm run dev
+
+➡️ Starts the frontend app in development mode.
+
+📍 Default URL:
+
+http://localhost:3000
+🛠️ Backend Setup (Django + DRF)
+1. Navigate to the backend directory
+cd backend
+
+➡️ Moves you into the Django backend folder.
+
+2. Create a virtual environment
+python -m venv venv
+
+➡️ Creates an isolated Python environment to avoid dependency conflicts.
+
+3. Activate the virtual environment
+🪟 Windows:
+venv\Scripts\activate
+🍎 macOS / 🐧 Linux:
+source venv/bin/activate
+
+➡️ Activates the virtual environment so installed packages stay local to the project.
+
+4. Install backend dependencies
+pip install -r requirements.txt
+
+➡️ Installs Django, DRF, and all required backend libraries.
+
+5. Run database migrations
+python manage.py migrate
+
+➡️ Applies database schema (tables, models) to PostgreSQL / Supabase.
+
+6. Start the backend server
+python manage.py runserver
+
+➡️ Runs the Django API server.
+
+📍 Default URL:
+
+http://localhost:8000
+
 ## 📜 License
 Developed for academic and institutional use under Holy Trinity University.
